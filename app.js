@@ -27,7 +27,7 @@ function renderOnline(data){
   const mine=state.players.find(p=>p.id===state.userId);if(mine){$('#totalArea').textContent=Math.round(mine.area).toLocaleString();localStorage.setItem('izlaArea',mine.area)}renderBoard();
 }
 async function fetchWorld(){try{const r=await fetch('/api/world');if(r.ok)renderOnline(await r.json())}catch{toast('Server bilan aloqa yo‘q — offline rejim')}}
-function connectOnline(){fetchWorld();if(!window.EventSource)return;const events=new EventSource('/api/events');events.onmessage=e=>{try{renderOnline(JSON.parse(e.data))}catch{}};events.onerror=()=>events.close()}
+function connectOnline(){fetchWorld();setInterval(fetchWorld,5000)}
 async function sendLocation(p){if(!state.name||Date.now()-state.lastSent<3000)return;state.lastSent=Date.now();try{await fetch('/api/location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:state.userId,name:state.name,lat:p[0],lng:p[1]})})}catch{}}
 
 function onPosition(pos){ const p=[pos.coords.latitude,pos.coords.longitude],acc=pos.coords.accuracy||10; if(!state.map)initMap(p); if(!state.marker){state.marker=L.circleMarker(p,{radius:8,color:'#fff',weight:4,fillColor:'#ef3340',fillOpacity:1}).addTo(state.map);state.accuracy=L.circle(p,{radius:acc,color:'#1246d8',weight:1,fillOpacity:.07}).addTo(state.map);state.map.setView(p,17)} else {state.marker.setLatLng(p);state.accuracy.setLatLng(p).setRadius(acc)} sendLocation(p);if(state.active)addPoint(p); }
