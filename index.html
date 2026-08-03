@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f7f7f9" />
+  <title>IZLA — Yur. Egalla. Himoya qil.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="map" aria-label="Hududlar xaritasi"></div>
+
+  <header class="topbar">
+    <button class="brand" id="brandBtn" aria-label="Bosh sahifa"><span>IZ</span><i>LA</i></button>
+    <div class="live-pill"><b></b><span>JONLI</span></div>
+    <button class="avatar" id="profileBtn" aria-label="Profil"><span id="avatarLetter">I</span><em id="levelBadge">1</em></button>
+  </header>
+
+  <section class="area-card glass">
+    <p>MENING HUDUDIM</p>
+    <div><strong id="totalArea">0</strong><span>m²</span></div>
+    <small><i></i><span id="areaStatus">Birinchi hududingizni egallang</span></small>
+  </section>
+
+  <button class="locate-btn glass" id="locateBtn" aria-label="Meni xaritada ko‘rsat">
+    <svg viewBox="0 0 24 24"><path d="M12 2v3m0 14v3M2 12h3m14 0h3M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
+  </button>
+
+  <aside class="leaderboard glass" id="leaderboard">
+    <div class="leader-head"><span>REYTING</span><button id="closeBoard">×</button></div>
+    <div id="leaderRows"></div>
+  </aside>
+
+  <main class="bottom-panel glass">
+    <div class="drag"></div>
+    <div class="walking-info">
+      <div><span>MASOFA</span><strong id="distance">0.00 <small>km</small></strong></div>
+      <div><span>VAQT</span><strong id="timer">00:00</strong></div>
+      <div><span>TEZLIK</span><strong id="speed">0.0 <small>km/soat</small></strong></div>
+    </div>
+    <div class="action-row">
+      <button class="rank-btn" id="rankBtn" aria-label="Reyting">
+        <svg viewBox="0 0 24 24"><path d="M4 20v-7h4v7M10 20V4h4v16m2 0V9h4v11"/></svg>
+      </button>
+      <button class="start-btn" id="startBtn"><span class="play">▶</span><span class="stop">■</span><b id="startText">YURISHNI BOSHLASH</b></button>
+    </div>
+    <p class="hint" id="hint">Boshlagan joyingizga qaytib, hududni yoping</p>
+  </main>
+
+  <div class="modal active" id="welcomeModal">
+    <div class="modal-card">
+      <div class="logo-mark"><span>IZ</span><i>LA</i></div>
+      <div class="mini-map"><div class="route-shape"></div><b class="pin p1"></b><b class="pin p2"></b></div>
+      <p class="eyebrow">SHAHAR SENIKI</p>
+      <h1>Yur. Egalla.<br><em>Himoya qil.</em></h1>
+      <p class="intro">Yurgan yo‘lingiz bilan hudud yarating. Kattaroq maydonni aylanib, raqiblaringiz yerini egallang.</p>
+      <label for="nameInput">ISMINGIZ</label>
+      <input id="nameInput" maxlength="20" autocomplete="name" placeholder="Masalan, Jasur" />
+      <p class="error" id="nameError">Davom etish uchun ismingizni yozing</p>
+      <button class="primary" id="continueBtn">DAVOM ETISH <span>→</span></button>
+      <small class="terms">Davom etib, xavfsizlik qoidalariga rozilik bildirasiz</small>
+    </div>
+  </div>
+
+  <div class="modal" id="locationModal">
+    <div class="modal-card permission">
+      <div class="radar"><span></span><i></i></div>
+      <p class="eyebrow">KEYINGI QADAM</p>
+      <h2>Joylashuvingizni<br><em>yoqing</em></h2>
+      <p>Yurilgan yo‘lni aniq chizish va hududlarni egallash uchun joylashuv kerak.</p>
+      <div class="privacy"><b>✓</b><span><strong>Ma’lumotlaringiz xavfsiz</strong><small>Joylashuv faqat o‘yin davomida ishlatiladi</small></span></div>
+      <button class="primary" id="allowBtn">JOYLASHUVNI YOQISH <span>⌖</span></button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
