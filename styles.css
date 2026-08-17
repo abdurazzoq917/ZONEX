@@ -10,3 +10,146 @@
 .owner-label{background:transparent!important;border:0!important;width:auto!important;height:auto!important}.owner-label span{display:block;font-weight:900;white-space:nowrap;text-shadow:-2px -2px 0 #fff,2px -2px 0 #fff,-2px 2px 0 #fff,2px 2px 0 #fff;transform:translate(-50%,-50%);letter-spacing:-.6px}
 @keyframes pulse{50%{box-shadow:0 0 0 7px #ef334008}}@keyframes spin{to{transform:rotate(360deg)}}
 @media(min-width:700px){.bottom-panel{width:430px;left:50%;transform:translateX(-50%);bottom:18px;border-radius:25px}.locate-btn{bottom:210px;right:calc(50% - 270px)}.area-card{left:calc(50% - 330px)}}
+/* ===============================
+   JONLI ODAMLAR
+   =============================== */
+
+.live-pill {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.88);
+  box-shadow: 0 5px 20px rgba(0,0,0,.08);
+}
+
+.live-pill b {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 5px rgba(34,197,94,.12);
+  animation: livePulse 1.5s infinite;
+}
+
+@keyframes livePulse {
+  0%,100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: .55;
+    transform: scale(.8);
+  }
+}
+
+.live-panel {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  width: min(360px, calc(100vw - 28px));
+  max-height: 55vh;
+  overflow-y: auto;
+  transform: translate(-50%, -15px);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1000;
+
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(18px);
+  border-radius: 20px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.18);
+
+  transition:
+    opacity .2s ease,
+    transform .2s ease;
+}
+
+.live-panel.open {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+.live-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(0,0,0,.08);
+}
+
+.live-header strong {
+  font-size: 14px;
+}
+
+.live-header button {
+  border: 0;
+  background: transparent;
+  font-size: 26px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+#livePlayers {
+  padding: 8px;
+}
+
+.live-player {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.live-player:hover {
+  background: rgba(0,0,0,.05);
+}
+
+.live-player > i {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(0,0,0,.05);
+}
+
+.live-player-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.live-player-info strong {
+  font-size: 14px;
+}
+
+.live-player-info small {
+  font-size: 11px;
+  opacity: .55;
+}
+
+.live-player > b {
+  font-size: 22px;
+  opacity: .45;
+}
+
+.live-empty {
+  padding: 25px 15px;
+  text-align: center;
+  font-size: 13px;
+  opacity: .6;
+}

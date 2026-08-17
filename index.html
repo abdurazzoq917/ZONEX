@@ -16,7 +16,23 @@
 
   <header class="topbar">
     <button class="brand" id="brandBtn" aria-label="Bosh sahifa"><span>IZ</span><i>LA</i></button>
-    <div class="live-pill"><b></b><span>JONLI</span></div>
+    <button class="live-pill" id="liveBtn" type="button">
+  <b></b>
+  <span>JONLI</span>
+</button>
+
+<div id="livePanel" class="live-panel">
+  <div class="live-header">
+    <strong>JONLI ODAMLAR</strong>
+    <button id="closeLive" type="button">×</button>
+  </div>
+
+  <div id="livePlayers">
+    <div class="live-empty">
+      Hozircha boshqa odamlar ko‘rinmadi
+    </div>
+  </div>
+</div>
     <button class="avatar" id="profileBtn" aria-label="Profil"><span id="avatarLetter">I</span><em id="levelBadge">1</em></button>
   </header>
 

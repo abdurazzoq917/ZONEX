@@ -1177,3 +1177,124 @@ document.addEventListener(
     }
   }
 );
+// ===============================
+// JONLI ODAMLAR
+// ===============================
+
+const liveBtn = document.querySelector('#liveBtn');
+const livePanel = document.querySelector('#livePanel');
+const closeLive = document.querySelector('#closeLive');
+const livePlayers = document.querySelector('#livePlayers');
+
+let liveOpen = false;
+
+function showLivePlayers() {
+  if (!livePlayers) return;
+
+  const now = Date.now();
+
+  const players = (state.players || []).filter((p) => {
+    if (!p.location) return false;
+
+    // Oxirgi 2 daqiqada joylashuvi yuborilgan odam
+    return now - Number(p.location.time || 0) < 120000;
+  });
+
+  if (!players.length) {
+    livePlayers.innerHTML = `
+      <div class="live-empty">
+        Hozircha boshqa odamlar ko‘rinmadi
+      </div>
+    `;
+    return;
+  }
+
+  livePlayers.innerHTML = players
+    .map((p) => {
+      const isMe = String(p.id) === String(state.userId);
+
+      return `
+        <button
+          class="live-player"
+          data-player-id="${esc(String(p.id))}"
+          type="button"
+        >
+          <i style="background:${p.color || '#ef3340'}"></i>
+
+          <span class="live-player-info">
+            <strong>
+              ${esc(p.name || 'Nomaʼlum')}
+              ${isMe ? ' (Siz)' : ''}
+            </strong>
+            <small>
+              ${isMe ? 'Sizning joylashuvingiz' : 'Hozir onlayn'}
+            </small>
+          </span>
+
+          <b>›</b>
+        </button>
+      `;
+    })
+    .join('');
+
+  document.querySelectorAll('.live-player').forEach((button) => {
+    button.addEventListener('click', () => {
+      const id = button.dataset.playerId;
+
+      const person = state.players.find(
+        (p) => String(p.id) === String(id)
+      );
+
+      if (!person || !person.location || !state.map) return;
+
+      state.map.flyTo(
+        [
+          Number(person.location.lat),
+          Number(person.location.lng)
+        ],
+        17,
+        {
+          duration: 1
+        }
+      );
+
+      livePanel.classList.remove('open');
+      liveOpen = false;
+
+      toast(`${person.name} joylashuvi`);
+    });
+  });
+}
+
+function toggleLive() {
+  liveOpen = !liveOpen;
+
+  if (liveOpen) {
+    livePanel.classList.add('open');
+    showLivePlayers();
+  } else {
+    livePanel.classList.remove('open');
+  }
+}
+
+if (liveBtn) {
+  liveBtn.addEventListener('click', toggleLive);
+}
+
+if (closeLive) {
+  closeLive.addEventListener('click', () => {
+    liveOpen = false;
+    livePanel.classList.remove('open');
+  });
+}
+
+// World yangilanganda JONLI ro'yxatini ham yangilash
+const oldRenderOnline = renderOnline;
+
+renderOnline = function (data) {
+  oldRenderOnline(data);
+
+  if (liveOpen) {
+    showLivePlayers();
+  }
+};
