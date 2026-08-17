@@ -1,1 +1,5 @@
-{"name":"izla-online","version":"2.0.0","private":true,"scripts":{"start":"node server.js","vercel-build":"node -e \"console.log('Static site ready')\""},"engines":{"node":">=18"}}
+{
+  "name": "izla-online",
+  "version": "2.0.0",
+  "private": true
+}
