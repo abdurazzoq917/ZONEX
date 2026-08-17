@@ -1,11 +1,19 @@
-const { player } = require("./_store");
+const {
+  updateLocation,
+  addDistance
+} = require("./_store");
 
 function cors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader(
+    "Access-Control-Allow-Origin",
+    "*"
+  );
+
   res.setHeader(
     "Access-Control-Allow-Methods",
     "POST, OPTIONS"
   );
+
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type"
@@ -15,12 +23,10 @@ function cors(res) {
 module.exports = function handler(req, res) {
   cors(res);
 
-  // CORS tekshiruvi
   if (req.method === "OPTIONS") {
     return res.status(204).end();
   }
 
-  // Faqat POST
   if (req.method !== "POST") {
     return res.status(405).json({
       error: "method not allowed"
@@ -36,16 +42,9 @@ module.exports = function handler(req, res) {
     const lat = Number(body.lat);
     const lng = Number(body.lng);
 
-    // Ma'lumotlarni tekshirish
-    if (!id) {
+    if (!id || !name) {
       return res.status(400).json({
-        error: "id kerak"
-      });
-    }
-
-    if (!name) {
-      return res.status(400).json({
-        error: "name kerak"
+        error: "id va name kerak"
       });
     }
 
@@ -54,7 +53,7 @@ module.exports = function handler(req, res) {
       !Number.isFinite(lng)
     ) {
       return res.status(400).json({
-        error: "latitude yoki longitude noto'g'ri"
+        error: "location noto'g'ri"
       });
     }
 
@@ -65,30 +64,40 @@ module.exports = function handler(req, res) {
       lng > 180
     ) {
       return res.status(400).json({
-        error: "joylashuv chegaradan tashqarida"
+        error: "location chegaradan tashqarida"
       });
     }
 
-    // Player yaratish / topish
-    const user = player(id, name);
-
-    // Joylashuvni yangilash
-    user.location = {
+    const user = updateLocation(
+      id,
+      name,
       lat,
-      lng,
-      time: Date.now()
-    };
+      lng
+    );
 
-    // Javob
+    // Client yuborgan masofani ham saqlaymiz
+    if (
+      body.distance !== undefined
+    ) {
+      const distance = Number(
+        body.distance
+      );
+
+      if (
+        Number.isFinite(distance) &&
+        distance > 0
+      ) {
+        addDistance(
+          id,
+          name,
+          distance
+        );
+      }
+    }
+
     return res.status(200).json({
       ok: true,
-      player: {
-        id: user.id,
-        name: user.name,
-        color: user.color,
-        location: user.location,
-        area: user.area || 0
-      }
+      player: user
     });
 
   } catch (error) {
