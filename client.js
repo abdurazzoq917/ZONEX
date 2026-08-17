@@ -1,51 +1,65 @@
 const $ = (s) => document.querySelector(s);
 
-// ===============================
-// SAQLANGAN FOYDALANUVCHI
-// ===============================
-const savedName = localStorage.getItem('izlaName') || '';
+/* =========================================================
+   ZONEX — Multiplayer Territory Game
+   ========================================================= */
 
 const state = {
-  name: savedName,
+  name: localStorage.getItem('zonexName') || '',
   userId:
+    localStorage.getItem('zonexUserId') ||
     localStorage.getItem('izlaUserId') ||
-    (crypto.randomUUID ? crypto.randomUUID() : 'user-' + Date.now()),
+    crypto.randomUUID(),
 
   map: null,
   marker: null,
   accuracy: null,
   watching: null,
+
   active: false,
   started: 0,
+
   points: [],
   line: null,
   preview: null,
-  territories: [],
+
   distance: 0,
   timer: null,
+
   onlineLayers: [],
   lastSent: 0,
-  players: []
+  players: [],
+
+  worldTimer: null,
+  locationTimer: null
 };
 
-// User ID ni saqlash
-localStorage.setItem('izlaUserId', state.userId);
+localStorage.setItem('zonexUserId', state.userId);
 
-// Agar nik mavjud bo'lsa, uni ham saqlab qo'yamiz
-if (state.name) {
-  localStorage.setItem('izlaName', state.name);
+/* Eski foydalanuvchi ma'lumotlarini yo'qotmaslik */
+if (!localStorage.getItem('zonexName')) {
+  const oldName = localStorage.getItem('izlaName');
+  if (oldName) {
+    state.name = oldName;
+    localStorage.setItem('zonexName', oldName);
+  }
 }
 
 const colors = [
   '#ef3340',
   '#1246d8',
   '#782fd1',
-  '#f29c16'
+  '#f29c16',
+  '#00a86b',
+  '#e83e8c',
+  '#00a8cc',
+  '#ff6b00'
 ];
 
-// ===============================
-// TOAST
-// ===============================
+/* =========================================================
+   Yordamchi funksiyalar
+   ========================================================= */
+
 function toast(msg) {
   const t = $('#toast');
 
@@ -61,16 +75,16 @@ function toast(msg) {
   }, 2600);
 }
 
-// ===============================
-// XAVFSIZ MATN
-// ===============================
-function esc(v) {
-  return String(v || '').replace(/[<>]/g, '');
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  }[c]));
 }
 
-// ===============================
-// MASOFA
-// ===============================
 function hav(a, b) {
   const R = 6371000;
   const p = Math.PI / 180;
@@ -87,14 +101,14 @@ function hav(a, b) {
   return 2 * R * Math.asin(Math.sqrt(x));
 }
 
-// ===============================
-// POLIGON MAYDONI
-// ===============================
 function polygonArea(points) {
-  if (points.length < 3) return 0;
+  if (!Array.isArray(points) || points.length < 3) {
+    return 0;
+  }
 
   const lat =
-    (points.reduce((s, p) => s + p[0], 0) / points.length) *
+    points.reduce((sum, p) => sum + p[0], 0) /
+    points.length *
     Math.PI /
     180;
 
@@ -105,16 +119,27 @@ function polygonArea(points) {
     const b = points[(i + 1) % points.length];
 
     sum +=
-      (a[1] * 111320 * Math.cos(lat)) * (b[0] * 110540) -
-      (b[1] * 111320 * Math.cos(lat)) * (a[0] * 110540);
+      (a[1] * 111320 * Math.cos(lat)) *
+        (b[0] * 110540) -
+      (b[1] * 111320 * Math.cos(lat)) *
+        (a[0] * 110540);
   }
 
   return Math.abs(sum / 2);
 }
 
-// ===============================
-// MAP
-// ===============================
+function getPlayerColor(player, index = 0) {
+  if (player && player.color) {
+    return player.color;
+  }
+
+  return colors[index % colors.length];
+}
+
+/* =========================================================
+   Xarita
+   ========================================================= */
+
 function initMap(center = [41.3111, 69.2797]) {
   if (state.map) return;
 
@@ -135,242 +160,354 @@ function initMap(center = [41.3111, 69.2797]) {
   renderBoard();
 }
 
-// ===============================
-// RIVALS
-// ===============================
-function addRivals(c) {
-  const rivals = [
-    {
-      name: 'Sardor',
-      color: colors[1],
-      off: [0.0013, 0.0009],
-      area: 2840
-    },
-    {
-      name: 'Malika',
-      color: colors[2],
-      off: [-0.0011, 0.0014],
-      area: 1920
-    },
-    {
-      name: 'Akmal',
-      color: colors[3],
-      off: [0.0005, -0.0018],
-      area: 980
-    }
-  ];
+/* =========================================================
+   Online o'yinchilar
+   ========================================================= */
 
-  rivals.forEach((r, i) => {
-    const [x, y] = [
-      c[0] + r.off[0],
-      c[1] + r.off[1]
-    ];
-
-    const d = 0.00045 + i * 0.00008;
-
-    const pts = [
-      [x - d, y - d],
-      [x + d * 0.7, y - d * 1.1],
-      [x + d, y + d * 0.55],
-      [x - d * 0.35, y + d],
-      [x - d * 1.1, y + d * 0.25]
-    ];
-
-    L.polygon(pts, {
-      color: r.color,
-      fillColor: r.color,
-      fillOpacity: 0.23,
-      weight: 2
-    })
-      .addTo(state.map)
-      .bindTooltip(r.name, {
-        permanent: true,
-        direction: 'center',
-        className: 'territory-label'
-      });
-
-    state.territories.push(r);
-  });
-}
-
-// ===============================
-// LEADERBOARD
-// ===============================
-function renderBoard() {
-  const rows = (
-    state.players.length
-      ? state.players
-      : [
-          {
-            name: state.name || 'Siz',
-            color: '#ef3340',
-            area: +localStorage.getItem('izlaArea') || 0
-          }
-        ]
-  ).sort((a, b) => b.area - a.area);
-
-  const leaderRows = $('#leaderRows');
-
-  if (!leaderRows) return;
-
-  leaderRows.innerHTML = rows
-    .map(
-      (r, i) => `
-        <div class="leader-row">
-          <b>${i + 1}</b>
-          <i style="background:${r.color || colors[i % colors.length]}"></i>
-          <span>${esc(r.name)}</span>
-          <strong>${Math.round(r.area).toLocaleString()} m²</strong>
-        </div>
-      `
-    )
-    .join('');
-}
-
-// ===============================
-// ONLINE QATLAMLAR
-// ===============================
 function clearOnline() {
-  state.onlineLayers.forEach((l) => l.remove());
+  state.onlineLayers.forEach((layer) => {
+    try {
+      layer.remove();
+    } catch {}
+  });
+
   state.onlineLayers = [];
 }
 
-// ===============================
-// ONLINE WORLD
-// ===============================
 function renderOnline(data) {
   if (!state.map) return;
 
   clearOnline();
 
-  state.players = data.players || [];
+  state.players = Array.isArray(data?.players)
+    ? data.players
+    : [];
 
-  state.players.forEach((p, idx) => {
-    const color =
-      p.color || colors[idx % colors.length];
+  /*
+   * Har bir o'yinchining hududlari
+   */
+  state.players.forEach((player, index) => {
+    const color = getPlayerColor(player, index);
 
-    const all = [];
+    const allPoints = [];
 
-    // Hududlar
-    (p.territories || []).forEach((t) => {
-      const layer = L.polygon(t.points, {
-        color,
-        fillColor: color,
-        fillOpacity: 0.24,
-        weight: 2
-      }).addTo(state.map);
+    /*
+     * HUDUDLAR
+     */
+    (player.territories || []).forEach((territory) => {
+      if (
+        !Array.isArray(territory.points) ||
+        territory.points.length < 3
+      ) {
+        return;
+      }
 
-      state.onlineLayers.push(layer);
+      const polygon = L.polygon(
+        territory.points,
+        {
+          color: color,
+          fillColor: color,
 
-      t.points.forEach((x) => all.push(x));
+          /*
+           * Xiralashgan hudud
+           */
+          fillOpacity: 0.25,
+
+          weight: 2,
+
+          opacity: 0.9
+        }
+      ).addTo(state.map);
+
+      /*
+       * Hudud ustiga bosilganda
+       * egasining ma'lumotini ko'rsatadi
+       */
+      polygon.bindTooltip(
+        `<b>${esc(player.name)}</b><br>${Math.round(
+          territory.area || 0
+        ).toLocaleString()} m²`,
+        {
+          sticky: true,
+          direction: 'top'
+        }
+      );
+
+      state.onlineLayers.push(polygon);
+
+      territory.points.forEach((point) => {
+        allPoints.push(point);
+      });
     });
 
-    // Ism
-    if (all.length) {
+    /*
+     * HUDUD MARKAZIDA NIK
+     */
+    if (allPoints.length) {
       const center = [
-        all.reduce((s, x) => s + x[0], 0) / all.length,
-        all.reduce((s, x) => s + x[1], 0) / all.length
+        allPoints.reduce((sum, p) => sum + p[0], 0) /
+          allPoints.length,
+
+        allPoints.reduce((sum, p) => sum + p[1], 0) /
+          allPoints.length
       ];
 
       const size = Math.max(
-        10,
+        12,
         Math.min(
-          28,
-          10 + Math.sqrt(p.area || 0) / 14
+          26,
+          12 + Math.sqrt(player.area || 0) / 16
         )
       );
 
       const label = L.marker(center, {
         interactive: false,
+
         icon: L.divIcon({
-          className: 'owner-label',
+          className: 'zonex-owner-label',
+
           html: `
-            <span style="
+            <div style="
+              display:inline-flex;
+              align-items:center;
+              justify-content:center;
+              padding:5px 9px;
+              border-radius:999px;
+              background:rgba(255,255,255,.88);
+              box-shadow:0 2px 10px rgba(0,0,0,.20);
+              border:2px solid ${color};
+              color:${color};
+              font-weight:800;
               font-size:${size}px;
-              color:${color}
+              white-space:nowrap;
+              text-shadow:none;
             ">
-              ${esc(p.name)}
-            </span>
-          `
+              ${esc(player.name)}
+            </div>
+          `,
+
+          iconSize: null,
+          iconAnchor: [0, 0]
         })
       }).addTo(state.map);
 
       state.onlineLayers.push(label);
     }
 
-    // Odamning joylashuvi
+    /*
+     * BOSHQA O'YINCHINING JOYLASHUVI
+     */
     if (
-      p.location &&
-      p.id !== state.userId &&
-      Date.now() - p.location.time < 120000
+      player.location &&
+      player.id !== state.userId &&
+      Number.isFinite(+player.location.lat) &&
+      Number.isFinite(+player.location.lng)
     ) {
-      const dot = L.circleMarker(
-        [p.location.lat, p.location.lng],
-        {
-          radius: 6,
-          color: '#fff',
-          weight: 3,
-          fillColor: color,
-          fillOpacity: 1
-        }
-      )
-        .addTo(state.map)
-        .bindTooltip(esc(p.name));
+      const age = Date.now() - (+player.location.time || 0);
 
-      state.onlineLayers.push(dot);
+      /*
+       * 2 daqiqadan eski joylashuvni ko'rsatmaymiz
+       */
+      if (age < 120000) {
+        const dot = L.circleMarker(
+          [
+            +player.location.lat,
+            +player.location.lng
+          ],
+          {
+            radius: 8,
+            color: '#ffffff',
+            weight: 3,
+            fillColor: color,
+            fillOpacity: 1
+          }
+        ).addTo(state.map);
+
+        dot.bindTooltip(
+          `<b>${esc(player.name)}</b><br>Hozir shu yerda`,
+          {
+            direction: 'top'
+          }
+        );
+
+        state.onlineLayers.push(dot);
+
+        /*
+         * O'yinchi yonidagi kichik nik
+         */
+        const playerLabel = L.marker(
+          [
+            +player.location.lat,
+            +player.location.lng
+          ],
+          {
+            interactive: false,
+
+            icon: L.divIcon({
+              className: 'zonex-player-label',
+
+              html: `
+                <div style="
+                  margin-top:13px;
+                  color:${color};
+                  font-weight:800;
+                  font-size:12px;
+                  white-space:nowrap;
+                  text-shadow:
+                    0 1px 2px white,
+                    1px 0 2px white,
+                    -1px 0 2px white;
+                ">
+                  ${esc(player.name)}
+                </div>
+              `,
+
+              iconSize: null
+            })
+          }
+        ).addTo(state.map);
+
+        state.onlineLayers.push(playerLabel);
+      }
     }
   });
 
-  // O'zimizning maydonimiz
+  /*
+   * O'ZIMIZNI TOPISH
+   */
   const mine = state.players.find(
-    (p) => p.id === state.userId
+    (player) => player.id === state.userId
   );
 
   if (mine) {
-    const totalArea = $('#totalArea');
+    const area = Number(mine.area) || 0;
 
-    if (totalArea) {
-      totalArea.textContent =
-        Math.round(mine.area).toLocaleString();
+    if ($('#totalArea')) {
+      $('#totalArea').textContent =
+        Math.round(area).toLocaleString();
     }
 
-    localStorage.setItem(
-      'izlaArea',
-      mine.area
-    );
+    localStorage.setItem('zonexArea', area);
+    localStorage.setItem('izlaArea', area);
   }
 
   renderBoard();
 }
 
-// ===============================
-// WORLD OLISH
-// ===============================
+/* =========================================================
+   Leaderboard
+   ========================================================= */
+
+function renderBoard() {
+  if (!$('#leaderRows')) return;
+
+  const rows = (
+    state.players.length
+      ? state.players
+      : [
+          {
+            id: state.userId,
+            name: state.name || 'Siz',
+            color: '#ef3340',
+            area:
+              Number(
+                localStorage.getItem('zonexArea') ||
+                  localStorage.getItem('izlaArea')
+              ) || 0
+          }
+        ]
+  ).slice().sort(
+    (a, b) =>
+      (Number(b.area) || 0) -
+      (Number(a.area) || 0)
+  );
+
+  $('#leaderRows').innerHTML = rows
+    .map((player, index) => {
+      const color = getPlayerColor(player, index);
+
+      const isMe =
+        player.id === state.userId;
+
+      return `
+        <div class="leader-row">
+          <b>${index + 1}</b>
+
+          <i style="
+            background:${color};
+            box-shadow:0 0 0 3px ${color}22;
+          "></i>
+
+          <span>
+            ${esc(player.name)}
+            ${
+              isMe
+                ? '<small style="opacity:.6"> (siz)</small>'
+                : ''
+            }
+          </span>
+
+          <strong>
+            ${Math.round(
+              Number(player.area) || 0
+            ).toLocaleString()} m²
+          </strong>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+/* =========================================================
+   Server bilan aloqa
+   ========================================================= */
+
 async function fetchWorld() {
   try {
-    const r = await fetch('/api/world');
+    const response = await fetch(
+      '/api/world',
+      {
+        method: 'GET',
+        cache: 'no-store'
+      }
+    );
 
-    if (r.ok) {
-      renderOnline(await r.json());
+    if (!response.ok) {
+      throw new Error('World API error');
     }
-  } catch {
-    toast('Server bilan aloqa yo‘q — offline rejim');
+
+    const data = await response.json();
+
+    renderOnline(data);
+  } catch (error) {
+    console.warn(
+      'ZONEX server bilan aloqa yo‘q:',
+      error
+    );
   }
 }
 
-// ===============================
-// ONLINE ULANISH
-// ===============================
 function connectOnline() {
   fetchWorld();
 
-  setInterval(fetchWorld, 5000);
+  if (state.worldTimer) {
+    clearInterval(state.worldTimer);
+  }
+
+  /*
+   * Har 2 sekundda o'yinchilarni yangilash
+   */
+  state.worldTimer = setInterval(
+    fetchWorld,
+    2000
+  );
 }
 
-// ===============================
-// LOCATION SERVERGA YUBORISH
-// ===============================
-async function sendLocation(p) {
+/* =========================================================
+   Joylashuvni serverga yuborish
+   ========================================================= */
+
+async function sendLocation(position) {
   if (
     !state.name ||
     Date.now() - state.lastSent < 3000
@@ -381,83 +518,118 @@ async function sendLocation(p) {
   state.lastSent = Date.now();
 
   try {
-    await fetch('/api/location', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        id: state.userId,
-        name: state.name,
-        lat: p[0],
-        lng: p[1]
-      })
-    });
-  } catch {}
+    await fetch(
+      '/api/location',
+      {
+        method: 'POST',
+
+        headers: {
+          'Content-Type':
+            'application/json'
+        },
+
+        body: JSON.stringify({
+          id: state.userId,
+          name: state.name,
+          lat: position[0],
+          lng: position[1]
+        })
+      }
+    );
+  } catch (error) {
+    console.warn(
+      'Location yuborilmadi',
+      error
+    );
+  }
 }
 
-// ===============================
-// GEOLOCATION
-// ===============================
-function onPosition(pos) {
+/* =========================================================
+   GPS
+   ========================================================= */
+
+function onPosition(position) {
   const p = [
-    pos.coords.latitude,
-    pos.coords.longitude
+    position.coords.latitude,
+    position.coords.longitude
   ];
 
-  const acc = pos.coords.accuracy || 10;
+  const accuracy =
+    position.coords.accuracy || 10;
 
   if (!state.map) {
     initMap(p);
   }
 
+  /*
+   * O'zimizning marker
+   */
   if (!state.marker) {
-    state.marker = L.circleMarker(p, {
-      radius: 8,
-      color: '#fff',
-      weight: 4,
-      fillColor: '#ef3340',
-      fillOpacity: 1
-    }).addTo(state.map);
+    state.marker = L.circleMarker(
+      p,
+      {
+        radius: 9,
+        color: '#ffffff',
+        weight: 4,
+        fillColor: '#ef3340',
+        fillOpacity: 1
+      }
+    ).addTo(state.map);
 
-    state.accuracy = L.circle(p, {
-      radius: acc,
-      color: '#1246d8',
-      weight: 1,
-      fillOpacity: 0.07
-    }).addTo(state.map);
+    state.marker.bindTooltip(
+      `<b>${esc(state.name || 'Siz')}</b>`,
+      {
+        direction: 'top'
+      }
+    );
+
+    state.accuracy = L.circle(
+      p,
+      {
+        radius: accuracy,
+        color: '#1246d8',
+        weight: 1,
+        fillOpacity: 0.07
+      }
+    ).addTo(state.map);
 
     state.map.setView(p, 17);
   } else {
     state.marker.setLatLng(p);
+
     state.accuracy
       .setLatLng(p)
-      .setRadius(acc);
+      .setRadius(accuracy);
   }
 
+  /*
+   * Joylashuvni serverga yuborish
+   */
   sendLocation(p);
 
+  /*
+   * Agar yurish boshlangan bo'lsa,
+   * yangi nuqta qo'shamiz
+   */
   if (state.active) {
     addPoint(p);
   }
 }
 
-// ===============================
-// GEO ERROR
-// ===============================
-function geoError(e) {
+function geoError(error) {
   initMap();
 
-  toast(
-    e.code === 1
-      ? 'Joylashuvga ruxsat berilmadi. Telefon sozlamalaridan ruxsat bering.'
-      : 'Joylashuv aniqlanmadi. GPS yoqilganini tekshiring.'
-  );
+  if (error?.code === 1) {
+    toast(
+      'Joylashuvga ruxsat berilmadi.'
+    );
+  } else {
+    toast(
+      'Joylashuv aniqlanmadi. GPSni tekshiring.'
+    );
+  }
 }
 
-// ===============================
-// LOCATION REQUEST
-// ===============================
 function requestLocation() {
   if (!navigator.geolocation) {
     geoError({ code: 0 });
@@ -465,39 +637,59 @@ function requestLocation() {
   }
 
   navigator.geolocation.getCurrentPosition(
-    (p) => {
-      onPosition(p);
+    (position) => {
+      onPosition(position);
 
-      $('#locationModal')?.classList.remove(
-        'active'
-      );
+      if ($('#locationModal')) {
+        $('#locationModal')
+          .classList
+          .remove('active');
+      }
 
       toast('Joylashuv aniqlandi ✓');
     },
+
     geoError,
+
     {
       enableHighAccuracy: true,
-      timeout: 10000
+      timeout: 15000,
+      maximumAge: 0
     }
   );
 }
 
-// ===============================
-// POINT QO'SHISH
-// ===============================
-function addPoint(p) {
-  const prev = state.points.at(-1);
+/* =========================================================
+   Yurish / chiziq
+   ========================================================= */
 
-  if (prev && hav(prev, p) < 3) {
+function addPoint(position) {
+  const previous =
+    state.points.at(-1);
+
+  /*
+   * GPS juda tez-tez nuqta yuborsa,
+   * 3 metrdan kamini tashlab ketamiz.
+   */
+  if (
+    previous &&
+    hav(previous, position) < 3
+  ) {
     return;
   }
 
-  if (prev) {
-    state.distance += hav(prev, p);
+  if (previous) {
+    state.distance += hav(
+      previous,
+      position
+    );
   }
 
-  state.points.push(p);
+  state.points.push(position);
 
+  /*
+   * Qizil yurish chizig'i
+   */
   if (!state.line) {
     state.line = L.polyline(
       state.points,
@@ -509,9 +701,15 @@ function addPoint(p) {
       }
     ).addTo(state.map);
   } else {
-    state.line.setLatLngs(state.points);
+    state.line.setLatLngs(
+      state.points
+    );
   }
 
+  /*
+   * Yopilayotgan hududni oldindan
+   * xira qilib ko'rsatish
+   */
   if (state.preview) {
     state.preview.remove();
   }
@@ -521,73 +719,86 @@ function addPoint(p) {
       state.points,
       {
         color: '#ef3340',
-        weight: 1,
-        dashArray: '5 7',
+        weight: 2,
+        dashArray: '6 7',
         fillColor: '#ef3340',
-        fillOpacity: 0.1
+        fillOpacity: 0.10
       }
     ).addTo(state.map);
   }
 
   updateStats();
 
+  /*
+   * Boshlagan joyga yaqinlashsa
+   * avtomatik yopiladi
+   */
   if (
     state.points.length > 8 &&
-    hav(state.points[0], p) < 18
+    hav(
+      state.points[0],
+      position
+    ) < 18
   ) {
     finishWalk(true);
   }
 }
 
-// ===============================
-// STATISTIKA
-// ===============================
-function updateStats() {
-  const distance = $('#distance');
-  const timer = $('#timer');
-  const speed = $('#speed');
+/* =========================================================
+   Statistika
+   ========================================================= */
 
-  if (distance) {
-    distance.innerHTML = `
-      ${(state.distance / 1000).toFixed(2)}
-      <small>km</small>
-    `;
+function updateStats() {
+  if ($('#distance')) {
+    $('#distance').innerHTML =
+      `${(state.distance / 1000).toFixed(2)}
+       <small>km</small>`;
   }
 
-  const secs = state.active
+  const seconds = state.active
     ? Math.floor(
-        (Date.now() - state.started) / 1000
+        (Date.now() - state.started) /
+          1000
       )
     : 0;
 
-  if (timer) {
-    timer.textContent =
-      `${String(Math.floor(secs / 60)).padStart(2, '0')}:` +
-      `${String(secs % 60).padStart(2, '0')}`;
+  if ($('#timer')) {
+    $('#timer').textContent =
+      `${String(
+        Math.floor(seconds / 60)
+      ).padStart(2, '0')}:${String(
+        seconds % 60
+      ).padStart(2, '0')}`;
   }
 
-  const sp = secs
-    ? (state.distance / secs) * 3.6
+  const speed = seconds
+    ? (state.distance / seconds) * 3.6
     : 0;
 
-  if (speed) {
-    speed.innerHTML = `
-      ${sp.toFixed(1)}
-      <small>km/soat</small>
-    `;
+  if ($('#speed')) {
+    $('#speed').innerHTML =
+      `${speed.toFixed(1)}
+       <small>km/soat</small>`;
   }
 }
 
-// ===============================
-// WALK BOSHLASH
-// ===============================
+/* =========================================================
+   Yurishni boshlash
+   ========================================================= */
+
 function startWalk() {
+  if (!state.name) {
+    toast('Avval nik kiriting');
+    return;
+  }
+
   if (!state.map) {
     initMap();
   }
 
   state.active = true;
   state.started = Date.now();
+
   state.points = [];
   state.distance = 0;
 
@@ -602,7 +813,11 @@ function startWalk() {
   state.line = null;
   state.preview = null;
 
-  $('#startBtn')?.classList.add('running');
+  if ($('#startBtn')) {
+    $('#startBtn')
+      .classList
+      .add('running');
+  }
 
   if ($('#startText')) {
     $('#startText').textContent =
@@ -611,8 +826,12 @@ function startWalk() {
 
   if ($('#hint')) {
     $('#hint').textContent =
-      'Boshlagan nuqtangizga qayting';
+      'Boshlagan joyingizga qayting';
   }
+
+  updateStats();
+
+  clearInterval(state.timer);
 
   state.timer = setInterval(
     updateStats,
@@ -620,41 +839,57 @@ function startWalk() {
   );
 
   if (navigator.geolocation) {
+    if (state.watching != null) {
+      navigator.geolocation.clearWatch(
+        state.watching
+      );
+    }
+
     state.watching =
       navigator.geolocation.watchPosition(
         onPosition,
         geoError,
         {
           enableHighAccuracy: true,
-          maximumAge: 1000
+          maximumAge: 1000,
+          timeout: 10000
         }
       );
   }
 
   toast(
-    'Yurish boshlandi — xavfsiz yuring!'
+    'Yurish boshlandi — hududingizni yarating!'
   );
 }
 
-// ===============================
-// WALK TUGATISH
-// ===============================
+/* =========================================================
+   Yurishni tugatish
+   ========================================================= */
+
 async function finishWalk(closed = false) {
+  if (!state.active) {
+    return;
+  }
+
   state.active = false;
 
   clearInterval(state.timer);
+
+  state.timer = null;
 
   if (state.watching != null) {
     navigator.geolocation.clearWatch(
       state.watching
     );
+
+    state.watching = null;
   }
 
-  state.watching = null;
-
-  $('#startBtn')?.classList.remove(
-    'running'
-  );
+  if ($('#startBtn')) {
+    $('#startBtn')
+      .classList
+      .remove('running');
+  }
 
   if ($('#startText')) {
     $('#startText').textContent =
@@ -663,7 +898,7 @@ async function finishWalk(closed = false) {
 
   if ($('#hint')) {
     $('#hint').textContent =
-      'Boshlagan joyingizga qaytib, hududni yoping';
+      'Boshlagan joyingizga qaytib hududni yoping';
   }
 
   if (state.points.length < 3) {
@@ -673,15 +908,38 @@ async function finishWalk(closed = false) {
     return;
   }
 
+  /*
+   * Boshlanish va tugash nuqtalari
+   */
   const gap = hav(
     state.points[0],
     state.points.at(-1)
   );
 
+  /*
+   * Avtomatik yopilgan bo'lsa,
+   * gapni tekshirish shart emas.
+   */
   if (!closed && gap > 35) {
     toast(
-      'Hudud yopilmadi — boshlagan nuqtaga qayting'
+      'Hudud yopilmadi — boshlagan joyingizga qayting'
     );
+
+    state.active = true;
+
+    if (navigator.geolocation) {
+      state.watching =
+        navigator.geolocation.watchPosition(
+          onPosition,
+          geoError,
+          {
+            enableHighAccuracy: true,
+            maximumAge: 1000,
+            timeout: 10000
+          }
+        );
+    }
+
     return;
   }
 
@@ -691,6 +949,7 @@ async function finishWalk(closed = false) {
 
   if (state.preview) {
     state.preview.remove();
+    state.preview = null;
   }
 
   if ($('#areaStatus')) {
@@ -698,14 +957,20 @@ async function finishWalk(closed = false) {
       `Yangi hudud: +${area.toLocaleString()} m²`;
   }
 
+  /*
+   * Serverga hudud yuborish
+   */
   try {
-    const r = await fetch(
+    const response = await fetch(
       '/api/territory',
       {
         method: 'POST',
+
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type':
+            'application/json'
         },
+
         body: JSON.stringify({
           id: state.userId,
           name: state.name,
@@ -715,216 +980,285 @@ async function finishWalk(closed = false) {
       }
     );
 
-    if (!r.ok) {
-      throw new Error('Server error');
+    if (!response.ok) {
+      throw new Error(
+        `HTTP ${response.status}`
+      );
     }
 
-    // Hududni localStorage'da ham saqlaymiz
-    const oldArea =
-      +localStorage.getItem('izlaArea') || 0;
+    const result =
+      await response.json();
 
-    localStorage.setItem(
-      'izlaArea',
-      oldArea + area
-    );
+    /*
+     * Yangi umumiy maydon
+     */
+    if (
+      result &&
+      Number.isFinite(+result.area)
+    ) {
+      localStorage.setItem(
+        'zonexArea',
+        result.area
+      );
 
-    toast(
-      `${area.toLocaleString()} m² hudud hammaga qo‘shildi!`
-    );
+      localStorage.setItem(
+        'izlaArea',
+        result.area
+      );
 
-    await fetchWorld();
-  } catch {
-    L.polygon(
-      state.points,
-      {
-        color: '#ef3340',
-        fillColor: '#ef3340',
-        fillOpacity: 0.28,
-        weight: 3
+      if ($('#totalArea')) {
+        $('#totalArea').textContent =
+          Math.round(
+            result.area
+          ).toLocaleString();
       }
-    ).addTo(state.map);
+    }
 
     toast(
-      'Server topilmadi — hudud vaqtincha faqat sizda ko‘rinadi'
+      `${area.toLocaleString()} m² hudud ZONEXga qo‘shildi!`
+    );
+
+    /*
+     * Serverdagi yangilangan dunyoni olish
+     */
+    await fetchWorld();
+  } catch (error) {
+    console.error(
+      'Territory error:',
+      error
+    );
+
+    /*
+     * Internet bo'lmasa vaqtincha
+     * xaritada ko'rsatamiz
+     */
+    const temporary =
+      L.polygon(
+        state.points,
+        {
+          color: '#ef3340',
+          fillColor: '#ef3340',
+          fillOpacity: 0.28,
+          weight: 3
+        }
+      ).addTo(state.map);
+
+    temporary.bindTooltip(
+      `<b>${esc(state.name)}</b><br>${area.toLocaleString()} m²`
+    );
+
+    toast(
+      'Serverga yuborilmadi — hudud vaqtincha ko‘rinadi'
     );
   }
+
+  /*
+   * Keyingi yurishga tayyorlash
+   */
+  state.points = [];
+  state.distance = 0;
+
+  if (state.line) {
+    state.line.remove();
+    state.line = null;
+  }
+
+  updateStats();
 }
 
-// ===============================
-// NICKNAME SAQLASH
-// ===============================
-function savePlayerName(name) {
-  const cleanName = String(name || '')
-    .trim()
-    .slice(0, 20);
+/* =========================================================
+   Nik oynasi
+   ========================================================= */
 
-  if (!cleanName) {
+function saveName() {
+  const input = $('#nameInput');
+
+  if (!input) return false;
+
+  const name =
+    input.value.trim();
+
+  if (!name) {
+    if ($('#nameError')) {
+      $('#nameError')
+        .classList
+        .add('show');
+    }
+
+    input.focus();
+
     return false;
   }
 
-  state.name = cleanName;
+  /*
+   * 20 ta belgidan oshirmaymiz
+   */
+  state.name = name.slice(0, 20);
 
-  // ENG MUHIM QATOR
+  /*
+   * Yangi ZONEX kaliti
+   */
   localStorage.setItem(
-    'izlaName',
-    cleanName
+    'zonexName',
+    state.name
   );
 
-  // Avatar
-  const avatar = $('#avatarLetter');
+  /*
+   * Eski kalit ham saqlanadi
+   * — eski foydalanuvchi yo'qolmaydi
+   */
+  localStorage.setItem(
+    'izlaName',
+    state.name
+  );
 
-  if (avatar) {
-    avatar.textContent =
-      cleanName[0].toUpperCase();
+  if ($('#avatarLetter')) {
+    $('#avatarLetter').textContent =
+      state.name[0].toUpperCase();
   }
+
+  if ($('#welcomeModal')) {
+    $('#welcomeModal')
+      .classList
+      .remove('active');
+  }
+
+  if ($('#locationModal')) {
+    $('#locationModal')
+      .classList
+      .add('active');
+  }
+
+  renderBoard();
 
   return true;
 }
 
-// ===============================
-// CONTINUE
-// ===============================
-$('#continueBtn').onclick = () => {
-  const input = $('#nameInput');
+/* =========================================================
+   Tugmalar
+   ========================================================= */
 
-  const n = input
-    ? input.value.trim()
-    : '';
+if ($('#continueBtn')) {
+  $('#continueBtn').onclick =
+    saveName;
+}
 
-  if (!n) {
-    $('#nameError')?.classList.add(
-      'show'
-    );
+if ($('#nameInput')) {
+  $('#nameInput').onkeydown =
+    (event) => {
+      if (event.key === 'Enter') {
+        saveName();
+      }
+    };
 
-    input?.focus();
+  $('#nameInput').oninput = () => {
+    if ($('#nameError')) {
+      $('#nameError')
+        .classList
+        .remove('show');
+    }
+  };
+}
 
-    return;
+if ($('#allowBtn')) {
+  $('#allowBtn').onclick =
+    requestLocation;
+}
+
+if ($('#startBtn')) {
+  $('#startBtn').onclick = () => {
+    if (state.active) {
+      finishWalk();
+    } else {
+      startWalk();
+    }
+  };
+}
+
+if ($('#locateBtn')) {
+  $('#locateBtn').onclick = () => {
+    if (
+      state.marker &&
+      state.map
+    ) {
+      state.map.flyTo(
+        state.marker.getLatLng(),
+        17
+      );
+    } else {
+      requestLocation();
+    }
+  };
+}
+
+if ($('#rankBtn')) {
+  $('#rankBtn').onclick = () => {
+    if ($('#leaderboard')) {
+      $('#leaderboard')
+        .classList
+        .toggle('open');
+    }
+  };
+}
+
+if ($('#closeBoard')) {
+  $('#closeBoard').onclick = () => {
+    if ($('#leaderboard')) {
+      $('#leaderboard')
+        .classList
+        .remove('open');
+    }
+  };
+}
+
+/* =========================================================
+   Sahifa yuklanganda
+   ========================================================= */
+
+(function boot() {
+  /*
+   * Saqlangan nik
+   */
+  const saved =
+    localStorage.getItem('zonexName') ||
+    localStorage.getItem('izlaName');
+
+  if (saved) {
+    state.name = saved;
+
+    if ($('#nameInput')) {
+      $('#nameInput').value =
+        saved;
+    }
+
+    if ($('#avatarLetter')) {
+      $('#avatarLetter').textContent =
+        saved[0].toUpperCase();
+    }
   }
 
-  // Nikni saqlash
-  savePlayerName(n);
+  /*
+   * Saqlangan maydon
+   */
+  const savedArea =
+    Number(
+      localStorage.getItem('zonexArea') ||
+      localStorage.getItem('izlaArea')
+    ) || 0;
 
-  // Welcome oynasini yopish
-  $('#welcomeModal')?.classList.remove(
-    'active'
-  );
+  if ($('#totalArea')) {
+    $('#totalArea').textContent =
+      Math.round(
+        savedArea
+      ).toLocaleString();
+  }
 
-  // Location oynasini ochish
-  $('#locationModal')?.classList.add(
-    'active'
-  );
+  /*
+   * Xarita mavjud bo'lsa ishga tushiramiz
+   */
+  if ($('#map')) {
+    initMap();
+  }
 
   renderBoard();
-};
-
-// ===============================
-// ENTER BOSILGANDA
-// ===============================
-$('#nameInput').onkeydown = (e) => {
-  if (e.key === 'Enter') {
-    $('#continueBtn')?.click();
-  }
-};
-
-// ===============================
-// INPUT O'ZGARGANDA
-// ===============================
-$('#nameInput').oninput = () => {
-  $('#nameError')?.classList.remove(
-    'show'
-  );
-};
-
-// ===============================
-// LOCATION BUTTON
-// ===============================
-$('#allowBtn').onclick =
-  requestLocation;
-
-// ===============================
-// START BUTTON
-// ===============================
-$('#startBtn').onclick = () => {
-  if (state.active) {
-    finishWalk();
-  } else {
-    startWalk();
-  }
-};
-
-// ===============================
-// LOCATE BUTTON
-// ===============================
-$('#locateBtn').onclick = () => {
-  if (state.marker) {
-    state.map.flyTo(
-      state.marker.getLatLng(),
-      17
-    );
-  } else {
-    requestLocation();
-  }
-};
-
-// ===============================
-// LEADERBOARD
-// ===============================
-$('#rankBtn').onclick = () => {
-  $('#leaderboard')?.classList.toggle(
-    'open'
-  );
-};
-
-$('#closeBoard').onclick = () => {
-  $('#leaderboard')?.classList.remove(
-    'open'
-  );
-};
-
-// ===============================
-// SAQLANGAN NIKNI QAYTA TIKLASH
-// ===============================
-const saved = localStorage.getItem(
-  'izlaName'
-);
-
-if (saved) {
-  state.name = saved;
-
-  const input = $('#nameInput');
-
-  if (input) {
-    input.value = saved;
-  }
-
-  const avatar = $('#avatarLetter');
-
-  if (avatar) {
-    avatar.textContent =
-      saved[0].toUpperCase();
-  }
-}
-
-// ===============================
-// SAQLANGAN AREA
-// ===============================
-const savedArea =
-  +localStorage.getItem('izlaArea') || 0;
-
-if ($('#totalArea')) {
-  $('#totalArea').textContent =
-    Math.round(savedArea).toLocaleString();
-}
-
-// ===============================
-// AGAR NIK OLDIN SAQLANGAN BO'LSA
-// WELCOME OYNASINI OCHMASLIK
-// ===============================
-if (saved) {
-  $('#welcomeModal')?.classList.remove(
-    'active'
-  );
-}
-
-// Xarita
-initMap();
+})();
