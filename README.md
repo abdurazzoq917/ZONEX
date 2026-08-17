@@ -1,4 +1,4 @@
-# IZLA
+#  ZONEX
 
 Geolokatsiya asosidagi hudud egallash o‘yini prototipi.
 

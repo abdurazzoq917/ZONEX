@@ -1,7 +1,7 @@
 const initialWorld = require('../world.json');
 
-const world = globalThis.__izlaWorld || structuredClone(initialWorld);
-globalThis.__izlaWorld = world;
+const world = globalThis.__zonexWorld || structuredClone(initialWorld);
+globalThis.__zonexWorld = world;
 
 function player(id, name) {
   let item = world.players.find((entry) => entry.id === id);
