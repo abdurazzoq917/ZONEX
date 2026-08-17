@@ -1,15 +1,10 @@
 const $ = (s) => document.querySelector(s);
 
-/* =========================================================
-   ZONEX — Multiplayer Territory Game
-   ========================================================= */
-
 const state = {
-  name: localStorage.getItem('zonexName') || '',
+  name: localStorage.getItem("izlaName") || "",
   userId:
-    localStorage.getItem('zonexUserId') ||
-    localStorage.getItem('izlaUserId') ||
-    crypto.randomUUID(),
+    localStorage.getItem("izlaUserId") ||
+    (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
 
   map: null,
   marker: null,
@@ -18,7 +13,6 @@ const state = {
 
   active: false,
   started: 0,
-
   points: [],
   line: null,
   preview: null,
@@ -27,62 +21,54 @@ const state = {
   timer: null,
 
   onlineLayers: [],
+  playerMarkers: [],
   lastSent: 0,
-  players: [],
 
-  worldTimer: null,
-  locationTimer: null
+  players: []
 };
 
-localStorage.setItem('zonexUserId', state.userId);
-
-/* Eski foydalanuvchi ma'lumotlarini yo'qotmaslik */
-if (!localStorage.getItem('zonexName')) {
-  const oldName = localStorage.getItem('izlaName');
-  if (oldName) {
-    state.name = oldName;
-    localStorage.setItem('zonexName', oldName);
-  }
-}
+localStorage.setItem("izlaUserId", state.userId);
 
 const colors = [
-  '#ef3340',
-  '#1246d8',
-  '#782fd1',
-  '#f29c16',
-  '#00a86b',
-  '#e83e8c',
-  '#00a8cc',
-  '#ff6b00'
+  "#ef3340",
+  "#1246d8",
+  "#782fd1",
+  "#f29c16",
+  "#00a878",
+  "#ff5c35",
+  "#8e44ad",
+  "#16a085"
 ];
 
-/* =========================================================
-   Yordamchi funksiyalar
-   ========================================================= */
+/* =========================
+   YORDAMCHI FUNKSIYALAR
+========================= */
 
 function toast(msg) {
-  const t = $('#toast');
+  const t = $("#toast");
 
   if (!t) return;
 
   t.textContent = msg;
-  t.classList.add('show');
+  t.classList.add("show");
 
   clearTimeout(t._x);
 
   t._x = setTimeout(() => {
-    t.classList.remove('show');
+    t.classList.remove("show");
   }, 2600);
 }
 
-function esc(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
-  }[c]));
+function esc(v) {
+  return String(v || "").replace(/[<>&"']/g, (c) => {
+    return {
+      "<": "&lt;",
+      ">": "&gt;",
+      "&": "&amp;",
+      '"': "&quot;",
+      "'": "&#039;"
+    }[c];
+  });
 }
 
 function hav(a, b) {
@@ -102,13 +88,10 @@ function hav(a, b) {
 }
 
 function polygonArea(points) {
-  if (!Array.isArray(points) || points.length < 3) {
-    return 0;
-  }
+  if (points.length < 3) return 0;
 
   const lat =
-    points.reduce((sum, p) => sum + p[0], 0) /
-    points.length *
+    (points.reduce((s, p) => s + p[0], 0) / points.length) *
     Math.PI /
     180;
 
@@ -119,40 +102,38 @@ function polygonArea(points) {
     const b = points[(i + 1) % points.length];
 
     sum +=
-      (a[1] * 111320 * Math.cos(lat)) *
-        (b[0] * 110540) -
-      (b[1] * 111320 * Math.cos(lat)) *
-        (a[0] * 110540);
+      a[1] *
+        111320 *
+        Math.cos(lat) *
+        b[0] *
+        110540 -
+      b[1] *
+        111320 *
+        Math.cos(lat) *
+        a[0] *
+        110540;
   }
 
   return Math.abs(sum / 2);
 }
 
-function getPlayerColor(player, index = 0) {
-  if (player && player.color) {
-    return player.color;
-  }
-
-  return colors[index % colors.length];
-}
-
-/* =========================================================
-   Xarita
-   ========================================================= */
+/* =========================
+   MAP
+========================= */
 
 function initMap(center = [41.3111, 69.2797]) {
   if (state.map) return;
 
-  state.map = L.map('map', {
+  state.map = L.map("map", {
     zoomControl: false,
     attributionControl: true
   }).setView(center, 16);
 
   L.tileLayer(
-    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     {
       maxZoom: 20,
-      attribution: '© OpenStreetMap'
+      attribution: "© OpenStreetMap"
     }
   ).addTo(state.map);
 
@@ -160,9 +141,9 @@ function initMap(center = [41.3111, 69.2797]) {
   renderBoard();
 }
 
-/* =========================================================
-   Online o'yinchilar
-   ========================================================= */
+/* =========================
+   ONLINE ODAMLAR
+========================= */
 
 function clearOnline() {
   state.onlineLayers.forEach((layer) => {
@@ -172,320 +153,234 @@ function clearOnline() {
   });
 
   state.onlineLayers = [];
+  state.playerMarkers = [];
 }
+
+function playerColor(player, index) {
+  return player.color || colors[index % colors.length];
+}
+
+function createPlayerMarker(player, color) {
+  if (!state.map || !player.location) return null;
+
+  const lat = Number(player.location.lat);
+  const lng = Number(player.location.lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  /*
+    Nik + rangli nuqta
+  */
+
+  const icon = L.divIcon({
+    className: "zonex-player-marker",
+
+    html: `
+      <div style="
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        pointer-events:none;
+      ">
+
+        <div style="
+          background:${color};
+          width:16px;
+          height:16px;
+          border-radius:50%;
+          border:3px solid white;
+          box-shadow:0 2px 8px rgba(0,0,0,.45);
+        "></div>
+
+        <div style="
+          margin-top:3px;
+          padding:3px 8px;
+          border-radius:999px;
+          background:rgba(0,0,0,.78);
+          color:white;
+          font-weight:800;
+          font-size:12px;
+          white-space:nowrap;
+          box-shadow:0 2px 7px rgba(0,0,0,.3);
+        ">
+          ${esc(player.name)}
+        </div>
+
+      </div>
+    `,
+
+    iconSize: [1, 1],
+    iconAnchor: [0, 0]
+  });
+
+  const marker = L.marker(
+    [lat, lng],
+    {
+      icon,
+      interactive: true
+    }
+  )
+    .addTo(state.map)
+    .bindTooltip(esc(player.name), {
+      direction: "top"
+    });
+
+  return marker;
+}
+
+/* =========================
+   ONLINE DATA
+========================= */
 
 function renderOnline(data) {
   if (!state.map) return;
 
   clearOnline();
 
-  state.players = Array.isArray(data?.players)
+  state.players = Array.isArray(data.players)
     ? data.players
     : [];
 
-  /*
-   * Har bir o'yinchining hududlari
-   */
   state.players.forEach((player, index) => {
-    const color = getPlayerColor(player, index);
-
-    const allPoints = [];
+    const color = playerColor(player, index);
 
     /*
-     * HUDUDLAR
-     */
-    (player.territories || []).forEach((territory) => {
+      HUDUDLAR
+    */
+
+    if (Array.isArray(player.territories)) {
+      player.territories.forEach((territory) => {
+        if (
+          !Array.isArray(territory.points) ||
+          territory.points.length < 3
+        ) {
+          return;
+        }
+
+        const layer = L.polygon(
+          territory.points,
+          {
+            color,
+            fillColor: color,
+            fillOpacity: 0.25,
+            weight: 2
+          }
+        )
+          .addTo(state.map)
+          .bindTooltip(
+            esc(
+              territory.ownerName ||
+                player.name ||
+                "Noma'lum"
+            ),
+            {
+              sticky: true
+            }
+          );
+
+        state.onlineLayers.push(layer);
+      });
+    }
+
+    /*
+      ODAMNING JOYLASHUVI
+
+      O'zimizni boshqa marker bilan
+      ko'rsatmaymiz.
+    */
+
+    if (
+      String(player.id) !== String(state.userId) &&
+      player.location
+    ) {
+      const locationTime = Number(
+        player.location.time || 0
+      );
+
+      /*
+        2 daqiqadan eski joylashuvni
+        ko'rsatmaymiz.
+      */
+
       if (
-        !Array.isArray(territory.points) ||
-        territory.points.length < 3
+        locationTime &&
+        Date.now() - locationTime > 120000
       ) {
         return;
       }
 
-      const polygon = L.polygon(
-        territory.points,
-        {
-          color: color,
-          fillColor: color,
-
-          /*
-           * Xiralashgan hudud
-           */
-          fillOpacity: 0.25,
-
-          weight: 2,
-
-          opacity: 0.9
-        }
-      ).addTo(state.map);
-
-      /*
-       * Hudud ustiga bosilganda
-       * egasining ma'lumotini ko'rsatadi
-       */
-      polygon.bindTooltip(
-        `<b>${esc(player.name)}</b><br>${Math.round(
-          territory.area || 0
-        ).toLocaleString()} m²`,
-        {
-          sticky: true,
-          direction: 'top'
-        }
+      const marker = createPlayerMarker(
+        player,
+        color
       );
 
-      state.onlineLayers.push(polygon);
-
-      territory.points.forEach((point) => {
-        allPoints.push(point);
-      });
-    });
-
-    /*
-     * HUDUD MARKAZIDA NIK
-     */
-    if (allPoints.length) {
-      const center = [
-        allPoints.reduce((sum, p) => sum + p[0], 0) /
-          allPoints.length,
-
-        allPoints.reduce((sum, p) => sum + p[1], 0) /
-          allPoints.length
-      ];
-
-      const size = Math.max(
-        12,
-        Math.min(
-          26,
-          12 + Math.sqrt(player.area || 0) / 16
-        )
-      );
-
-      const label = L.marker(center, {
-        interactive: false,
-
-        icon: L.divIcon({
-          className: 'zonex-owner-label',
-
-          html: `
-            <div style="
-              display:inline-flex;
-              align-items:center;
-              justify-content:center;
-              padding:5px 9px;
-              border-radius:999px;
-              background:rgba(255,255,255,.88);
-              box-shadow:0 2px 10px rgba(0,0,0,.20);
-              border:2px solid ${color};
-              color:${color};
-              font-weight:800;
-              font-size:${size}px;
-              white-space:nowrap;
-              text-shadow:none;
-            ">
-              ${esc(player.name)}
-            </div>
-          `,
-
-          iconSize: null,
-          iconAnchor: [0, 0]
-        })
-      }).addTo(state.map);
-
-      state.onlineLayers.push(label);
-    }
-
-    /*
-     * BOSHQA O'YINCHINING JOYLASHUVI
-     */
-    if (
-      player.location &&
-      player.id !== state.userId &&
-      Number.isFinite(+player.location.lat) &&
-      Number.isFinite(+player.location.lng)
-    ) {
-      const age = Date.now() - (+player.location.time || 0);
-
-      /*
-       * 2 daqiqadan eski joylashuvni ko'rsatmaymiz
-       */
-      if (age < 120000) {
-        const dot = L.circleMarker(
-          [
-            +player.location.lat,
-            +player.location.lng
-          ],
-          {
-            radius: 8,
-            color: '#ffffff',
-            weight: 3,
-            fillColor: color,
-            fillOpacity: 1
-          }
-        ).addTo(state.map);
-
-        dot.bindTooltip(
-          `<b>${esc(player.name)}</b><br>Hozir shu yerda`,
-          {
-            direction: 'top'
-          }
-        );
-
-        state.onlineLayers.push(dot);
-
-        /*
-         * O'yinchi yonidagi kichik nik
-         */
-        const playerLabel = L.marker(
-          [
-            +player.location.lat,
-            +player.location.lng
-          ],
-          {
-            interactive: false,
-
-            icon: L.divIcon({
-              className: 'zonex-player-label',
-
-              html: `
-                <div style="
-                  margin-top:13px;
-                  color:${color};
-                  font-weight:800;
-                  font-size:12px;
-                  white-space:nowrap;
-                  text-shadow:
-                    0 1px 2px white,
-                    1px 0 2px white,
-                    -1px 0 2px white;
-                ">
-                  ${esc(player.name)}
-                </div>
-              `,
-
-              iconSize: null
-            })
-          }
-        ).addTo(state.map);
-
-        state.onlineLayers.push(playerLabel);
+      if (marker) {
+        state.onlineLayers.push(marker);
+        state.playerMarkers.push(marker);
       }
     }
   });
 
   /*
-   * O'ZIMIZNI TOPISH
-   */
+    O'Z HUDUDIMIZ
+  */
+
   const mine = state.players.find(
-    (player) => player.id === state.userId
+    (p) => String(p.id) === String(state.userId)
   );
 
   if (mine) {
-    const area = Number(mine.area) || 0;
-
-    if ($('#totalArea')) {
-      $('#totalArea').textContent =
-        Math.round(area).toLocaleString();
+    if ($("#totalArea")) {
+      $("#totalArea").textContent =
+        Math.round(
+          Number(mine.area || 0)
+        ).toLocaleString();
     }
 
-    localStorage.setItem('zonexArea', area);
-    localStorage.setItem('izlaArea', area);
+    localStorage.setItem(
+      "izlaArea",
+      Number(mine.area || 0)
+    );
   }
 
   renderBoard();
 }
 
-/* =========================================================
-   Leaderboard
-   ========================================================= */
-
-function renderBoard() {
-  if (!$('#leaderRows')) return;
-
-  const rows = (
-    state.players.length
-      ? state.players
-      : [
-          {
-            id: state.userId,
-            name: state.name || 'Siz',
-            color: '#ef3340',
-            area:
-              Number(
-                localStorage.getItem('zonexArea') ||
-                  localStorage.getItem('izlaArea')
-              ) || 0
-          }
-        ]
-  ).slice().sort(
-    (a, b) =>
-      (Number(b.area) || 0) -
-      (Number(a.area) || 0)
-  );
-
-  $('#leaderRows').innerHTML = rows
-    .map((player, index) => {
-      const color = getPlayerColor(player, index);
-
-      const isMe =
-        player.id === state.userId;
-
-      return `
-        <div class="leader-row">
-          <b>${index + 1}</b>
-
-          <i style="
-            background:${color};
-            box-shadow:0 0 0 3px ${color}22;
-          "></i>
-
-          <span>
-            ${esc(player.name)}
-            ${
-              isMe
-                ? '<small style="opacity:.6"> (siz)</small>'
-                : ''
-            }
-          </span>
-
-          <strong>
-            ${Math.round(
-              Number(player.area) || 0
-            ).toLocaleString()} m²
-          </strong>
-        </div>
-      `;
-    })
-    .join('');
-}
-
-/* =========================================================
-   Server bilan aloqa
-   ========================================================= */
+/* =========================
+   SERVERDAN WORLD OLISH
+========================= */
 
 async function fetchWorld() {
   try {
     const response = await fetch(
-      '/api/world',
+      "/api/world?t=" + Date.now(),
       {
-        method: 'GET',
-        cache: 'no-store'
+        cache: "no-store"
       }
     );
 
     if (!response.ok) {
-      throw new Error('World API error');
+      throw new Error("World API error");
     }
 
     const data = await response.json();
 
     renderOnline(data);
+
   } catch (error) {
-    console.warn(
-      'ZONEX server bilan aloqa yo‘q:',
+    console.log(
+      "World yuklanmadi:",
       error
     );
   }
 }
+
+/*
+  Har 2 sekundda boshqa
+  odamlarning joylashuvini yangilaymiz.
+*/
 
 function connectOnline() {
   fetchWorld();
@@ -494,23 +389,26 @@ function connectOnline() {
     clearInterval(state.worldTimer);
   }
 
-  /*
-   * Har 2 sekundda o'yinchilarni yangilash
-   */
   state.worldTimer = setInterval(
     fetchWorld,
     2000
   );
 }
 
-/* =========================================================
-   Joylashuvni serverga yuborish
-   ========================================================= */
+/* =========================
+   LOCATION YUBORISH
+========================= */
 
 async function sendLocation(position) {
+  if (!state.name) return;
+
+  /*
+    Juda ko'p request yubormaslik
+  */
+
   if (
-    !state.name ||
-    Date.now() - state.lastSent < 3000
+    Date.now() - state.lastSent <
+    2000
   ) {
     return;
   }
@@ -518,114 +416,119 @@ async function sendLocation(position) {
   state.lastSent = Date.now();
 
   try {
-    await fetch(
-      '/api/location',
+    const response = await fetch(
+      "/api/location",
       {
-        method: 'POST',
+        method: "POST",
 
         headers: {
-          'Content-Type':
-            'application/json'
+          "Content-Type":
+            "application/json"
         },
 
         body: JSON.stringify({
           id: state.userId,
           name: state.name,
-          lat: position[0],
-          lng: position[1]
+          lat: Number(position[0]),
+          lng: Number(position[1])
         })
       }
     );
+
+    if (!response.ok) {
+      console.log(
+        "Location yuborilmadi"
+      );
+    }
+
   } catch (error) {
-    console.warn(
-      'Location yuborilmadi',
+    console.log(
+      "Location server xatosi:",
       error
     );
   }
 }
 
-/* =========================================================
+/* =========================
    GPS
-   ========================================================= */
+========================= */
 
-function onPosition(position) {
-  const p = [
-    position.coords.latitude,
-    position.coords.longitude
+function onPosition(pos) {
+  const point = [
+    Number(pos.coords.latitude),
+    Number(pos.coords.longitude)
   ];
 
   const accuracy =
-    position.coords.accuracy || 10;
+    Number(pos.coords.accuracy) || 10;
 
   if (!state.map) {
-    initMap(p);
+    initMap(point);
   }
 
   /*
-   * O'zimizning marker
-   */
+    O'z markerimiz
+  */
+
   if (!state.marker) {
-    state.marker = L.circleMarker(
-      p,
-      {
-        radius: 9,
-        color: '#ffffff',
+    state.marker =
+      L.circleMarker(point, {
+        radius: 8,
+        color: "#ffffff",
         weight: 4,
-        fillColor: '#ef3340',
+        fillColor: "#ef3340",
         fillOpacity: 1
-      }
-    ).addTo(state.map);
+      }).addTo(state.map);
 
-    state.marker.bindTooltip(
-      `<b>${esc(state.name || 'Siz')}</b>`,
-      {
-        direction: 'top'
-      }
-    );
-
-    state.accuracy = L.circle(
-      p,
-      {
+    state.accuracy =
+      L.circle(point, {
         radius: accuracy,
-        color: '#1246d8',
+        color: "#1246d8",
         weight: 1,
         fillOpacity: 0.07
-      }
-    ).addTo(state.map);
+      }).addTo(state.map);
 
-    state.map.setView(p, 17);
+    state.map.setView(
+      point,
+      17
+    );
+
   } else {
-    state.marker.setLatLng(p);
+    state.marker.setLatLng(point);
 
-    state.accuracy
-      .setLatLng(p)
-      .setRadius(accuracy);
+    if (state.accuracy) {
+      state.accuracy
+        .setLatLng(point)
+        .setRadius(accuracy);
+    }
   }
 
   /*
-   * Joylashuvni serverga yuborish
-   */
-  sendLocation(p);
+    Joylashuvni serverga yuborish
+  */
+
+  sendLocation(point);
 
   /*
-   * Agar yurish boshlangan bo'lsa,
-   * yangi nuqta qo'shamiz
-   */
+    Yurish boshlangan bo'lsa
+    nuqta qo'shamiz
+  */
+
   if (state.active) {
-    addPoint(p);
+    addPoint(point);
   }
 }
 
 function geoError(error) {
   initMap();
 
-  if (error?.code === 1) {
+  if (error && error.code === 1) {
     toast(
-      'Joylashuvga ruxsat berilmadi.'
+      "Joylashuvga ruxsat berilmadi."
     );
   } else {
     toast(
-      'Joylashuv aniqlanmadi. GPSni tekshiring.'
+      "Joylashuv aniqlanmadi. GPSni tekshiring."
     );
   }
 }
@@ -640,13 +543,14 @@ function requestLocation() {
     (position) => {
       onPosition(position);
 
-      if ($('#locationModal')) {
-        $('#locationModal')
-          .classList
-          .remove('active');
+      if ($("#locationModal")) {
+        $("#locationModal")
+          .classList.remove("active");
       }
 
-      toast('Joylashuv aniqlandi ✓');
+      toast(
+        "Joylashuv aniqlandi ✓"
+      );
     },
 
     geoError,
@@ -659,21 +563,17 @@ function requestLocation() {
   );
 }
 
-/* =========================================================
-   Yurish / chiziq
-   ========================================================= */
+/* =========================
+   YURISH
+========================= */
 
-function addPoint(position) {
+function addPoint(point) {
   const previous =
     state.points.at(-1);
 
-  /*
-   * GPS juda tez-tez nuqta yuborsa,
-   * 3 metrdan kamini tashlab ketamiz.
-   */
   if (
     previous &&
-    hav(previous, position) < 3
+    hav(previous, point) < 3
   ) {
     return;
   }
@@ -681,117 +581,107 @@ function addPoint(position) {
   if (previous) {
     state.distance += hav(
       previous,
-      position
+      point
     );
   }
 
-  state.points.push(position);
+  state.points.push(point);
 
-  /*
-   * Qizil yurish chizig'i
-   */
   if (!state.line) {
-    state.line = L.polyline(
-      state.points,
-      {
-        color: '#ef3340',
-        weight: 5,
-        opacity: 0.95,
-        lineJoin: 'round'
-      }
-    ).addTo(state.map);
+    state.line =
+      L.polyline(
+        state.points,
+        {
+          color: "#ef3340",
+          weight: 5,
+          opacity: 0.95,
+          lineJoin: "round"
+        }
+      ).addTo(state.map);
+
   } else {
     state.line.setLatLngs(
       state.points
     );
   }
 
-  /*
-   * Yopilayotgan hududni oldindan
-   * xira qilib ko'rsatish
-   */
   if (state.preview) {
     state.preview.remove();
   }
 
   if (state.points.length > 2) {
-    state.preview = L.polygon(
-      state.points,
-      {
-        color: '#ef3340',
-        weight: 2,
-        dashArray: '6 7',
-        fillColor: '#ef3340',
-        fillOpacity: 0.10
-      }
-    ).addTo(state.map);
+    state.preview =
+      L.polygon(
+        state.points,
+        {
+          color: "#ef3340",
+          weight: 1,
+          dashArray: "5 7",
+          fillColor: "#ef3340",
+          fillOpacity: 0.1
+        }
+      ).addTo(state.map);
   }
 
   updateStats();
 
   /*
-   * Boshlagan joyga yaqinlashsa
-   * avtomatik yopiladi
-   */
+    Boshlangan joyga qaytsa
+  */
+
   if (
     state.points.length > 8 &&
     hav(
       state.points[0],
-      position
+      point
     ) < 18
   ) {
     finishWalk(true);
   }
 }
 
-/* =========================================================
-   Statistika
-   ========================================================= */
-
 function updateStats() {
-  if ($('#distance')) {
-    $('#distance').innerHTML =
-      `${(state.distance / 1000).toFixed(2)}
-       <small>km</small>`;
+  if ($("#distance")) {
+    $("#distance").innerHTML =
+      `${(
+        state.distance / 1000
+      ).toFixed(2)} <small>km</small>`;
   }
 
-  const seconds = state.active
-    ? Math.floor(
-        (Date.now() - state.started) /
-          1000
-      )
-    : 0;
+  const seconds =
+    state.active
+      ? Math.floor(
+          (Date.now() -
+            state.started) /
+            1000
+        )
+      : 0;
 
-  if ($('#timer')) {
-    $('#timer').textContent =
+  if ($("#timer")) {
+    $("#timer").textContent =
       `${String(
         Math.floor(seconds / 60)
-      ).padStart(2, '0')}:${String(
+      ).padStart(2, "0")}:${String(
         seconds % 60
-      ).padStart(2, '0')}`;
+      ).padStart(2, "0")}`;
   }
 
-  const speed = seconds
-    ? (state.distance / seconds) * 3.6
-    : 0;
+  const speed =
+    seconds
+      ? (state.distance /
+          seconds) *
+        3.6
+      : 0;
 
-  if ($('#speed')) {
-    $('#speed').innerHTML =
-      `${speed.toFixed(1)}
-       <small>km/soat</small>`;
+  if ($("#speed")) {
+    $("#speed").innerHTML =
+      `${speed.toFixed(
+        1
+      )} <small>km/soat</small>`;
   }
 }
 
-/* =========================================================
-   Yurishni boshlash
-   ========================================================= */
-
 function startWalk() {
-  if (!state.name) {
-    toast('Avval nik kiriting');
-    return;
-  }
-
   if (!state.map) {
     initMap();
   }
@@ -813,33 +703,34 @@ function startWalk() {
   state.line = null;
   state.preview = null;
 
-  if ($('#startBtn')) {
-    $('#startBtn')
-      .classList
-      .add('running');
+  $("#startBtn")?.classList.add(
+    "running"
+  );
+
+  if ($("#startText")) {
+    $("#startText").textContent =
+      "YURISHNI YAKUNLASH";
   }
 
-  if ($('#startText')) {
-    $('#startText').textContent =
-      'YURISHNI YAKUNLASH';
+  if ($("#hint")) {
+    $("#hint").textContent =
+      "Boshlagan nuqtangizga qayting";
   }
-
-  if ($('#hint')) {
-    $('#hint').textContent =
-      'Boshlagan joyingizga qayting';
-  }
-
-  updateStats();
 
   clearInterval(state.timer);
 
-  state.timer = setInterval(
-    updateStats,
-    1000
-  );
+  state.timer =
+    setInterval(
+      updateStats,
+      1000
+    );
 
-  if (navigator.geolocation) {
-    if (state.watching != null) {
+  if (
+    navigator.geolocation
+  ) {
+    if (
+      state.watching !== null
+    ) {
       navigator.geolocation.clearWatch(
         state.watching
       );
@@ -852,32 +743,32 @@ function startWalk() {
         {
           enableHighAccuracy: true,
           maximumAge: 1000,
-          timeout: 10000
+          timeout: 15000
         }
       );
   }
 
   toast(
-    'Yurish boshlandi — hududingizni yarating!'
+    "Yurish boshlandi — xavfsiz yuring!"
   );
 }
 
-/* =========================================================
-   Yurishni tugatish
-   ========================================================= */
+/* =========================
+   HUDUDNI YAKUNLASH
+========================= */
 
-async function finishWalk(closed = false) {
-  if (!state.active) {
-    return;
-  }
-
+async function finishWalk(
+  closed = false
+) {
   state.active = false;
 
-  clearInterval(state.timer);
+  clearInterval(
+    state.timer
+  );
 
-  state.timer = null;
-
-  if (state.watching != null) {
+  if (
+    state.watching !== null
+  ) {
     navigator.geolocation.clearWatch(
       state.watching
     );
@@ -885,66 +776,48 @@ async function finishWalk(closed = false) {
     state.watching = null;
   }
 
-  if ($('#startBtn')) {
-    $('#startBtn')
-      .classList
-      .remove('running');
+  $("#startBtn")?.classList.remove(
+    "running"
+  );
+
+  if ($("#startText")) {
+    $("#startText").textContent =
+      "YURISHNI BOSHLASH";
   }
 
-  if ($('#startText')) {
-    $('#startText').textContent =
-      'YURISHNI BOSHLASH';
+  if ($("#hint")) {
+    $("#hint").textContent =
+      "Boshlagan joyingizga qaytib, hududni yoping";
   }
 
-  if ($('#hint')) {
-    $('#hint').textContent =
-      'Boshlagan joyingizga qaytib hududni yoping';
-  }
-
-  if (state.points.length < 3) {
+  if (
+    state.points.length < 3
+  ) {
     toast(
-      'Hudud yaratish uchun ko‘proq yuring'
+      "Hudud yaratish uchun ko'proq yuring"
     );
     return;
   }
 
-  /*
-   * Boshlanish va tugash nuqtalari
-   */
   const gap = hav(
     state.points[0],
     state.points.at(-1)
   );
 
-  /*
-   * Avtomatik yopilgan bo'lsa,
-   * gapni tekshirish shart emas.
-   */
-  if (!closed && gap > 35) {
+  if (
+    !closed &&
+    gap > 35
+  ) {
     toast(
-      'Hudud yopilmadi — boshlagan joyingizga qayting'
+      "Hudud yopilmadi — boshlagan nuqtaga qayting"
     );
-
-    state.active = true;
-
-    if (navigator.geolocation) {
-      state.watching =
-        navigator.geolocation.watchPosition(
-          onPosition,
-          geoError,
-          {
-            enableHighAccuracy: true,
-            maximumAge: 1000,
-            timeout: 10000
-          }
-        );
-    }
-
     return;
   }
 
   const area = Math.round(
-    polygonArea(state.points)
+    polygonArea(
+      state.points
+    )
   );
 
   if (state.preview) {
@@ -952,37 +825,35 @@ async function finishWalk(closed = false) {
     state.preview = null;
   }
 
-  if ($('#areaStatus')) {
-    $('#areaStatus').textContent =
+  if ($("#areaStatus")) {
+    $("#areaStatus").textContent =
       `Yangi hudud: +${area.toLocaleString()} m²`;
   }
 
-  /*
-   * Serverga hudud yuborish
-   */
   try {
-    const response = await fetch(
-      '/api/territory',
-      {
-        method: 'POST',
+    const response =
+      await fetch(
+        "/api/territory",
+        {
+          method: "POST",
 
-        headers: {
-          'Content-Type':
-            'application/json'
-        },
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
 
-        body: JSON.stringify({
-          id: state.userId,
-          name: state.name,
-          points: state.points,
-          area
-        })
-      }
-    );
+          body: JSON.stringify({
+            id: state.userId,
+            name: state.name,
+            points: state.points,
+            area
+          })
+        }
+      );
 
     if (!response.ok) {
       throw new Error(
-        `HTTP ${response.status}`
+        "Territory API error"
       );
     }
 
@@ -990,275 +861,319 @@ async function finishWalk(closed = false) {
       await response.json();
 
     /*
-     * Yangi umumiy maydon
-     */
-    if (
-      result &&
-      Number.isFinite(+result.area)
-    ) {
-      localStorage.setItem(
-        'zonexArea',
-        result.area
-      );
+      Serverdan keyingi
+      worldni darhol olamiz.
+    */
 
-      localStorage.setItem(
-        'izlaArea',
-        result.area
-      );
-
-      if ($('#totalArea')) {
-        $('#totalArea').textContent =
-          Math.round(
-            result.area
-          ).toLocaleString();
-      }
-    }
+    await fetchWorld();
 
     toast(
-      `${area.toLocaleString()} m² hudud ZONEXga qo‘shildi!`
+      `${area.toLocaleString()} m² hudud saqlandi!`
     );
 
     /*
-     * Serverdagi yangilangan dunyoni olish
-     */
-    await fetchWorld();
+      Yangi hududni xaritada
+      darhol ko'rsatish
+    */
+
+    if (
+      result.territory &&
+      Array.isArray(
+        result.territory.points
+      )
+    ) {
+      const color =
+        result.player?.color ||
+        "#ef3340";
+
+      const layer =
+        L.polygon(
+          result.territory.points,
+          {
+            color,
+            fillColor: color,
+            fillOpacity: 0.28,
+            weight: 3
+          }
+        ).addTo(state.map);
+
+      state.onlineLayers.push(
+        layer
+      );
+    }
+
   } catch (error) {
-    console.error(
-      'Territory error:',
+    console.log(
+      "Territory error:",
       error
     );
 
     /*
-     * Internet bo'lmasa vaqtincha
-     * xaritada ko'rsatamiz
-     */
-    const temporary =
-      L.polygon(
-        state.points,
-        {
-          color: '#ef3340',
-          fillColor: '#ef3340',
-          fillOpacity: 0.28,
-          weight: 3
-        }
-      ).addTo(state.map);
+      Server ishlamasa ham
+      lokal xaritada ko'rsatamiz
+    */
 
-    temporary.bindTooltip(
-      `<b>${esc(state.name)}</b><br>${area.toLocaleString()} m²`
-    );
+    L.polygon(
+      state.points,
+      {
+        color: "#ef3340",
+        fillColor: "#ef3340",
+        fillOpacity: 0.28,
+        weight: 3
+      }
+    ).addTo(state.map);
 
     toast(
-      'Serverga yuborilmadi — hudud vaqtincha ko‘rinadi'
+      "Server bilan aloqa yo'q — hudud vaqtincha lokal ko'rinadi"
     );
   }
-
-  /*
-   * Keyingi yurishga tayyorlash
-   */
-  state.points = [];
-  state.distance = 0;
-
-  if (state.line) {
-    state.line.remove();
-    state.line = null;
-  }
-
-  updateStats();
 }
 
-/* =========================================================
-   Nik oynasi
-   ========================================================= */
+/* =========================
+   LEADERBOARD
+========================= */
 
-function saveName() {
-  const input = $('#nameInput');
-
-  if (!input) return false;
-
-  const name =
-    input.value.trim();
-
-  if (!name) {
-    if ($('#nameError')) {
-      $('#nameError')
-        .classList
-        .add('show');
-    }
-
-    input.focus();
-
-    return false;
+function renderBoard() {
+  if (!$("#leaderRows")) {
+    return;
   }
 
-  /*
-   * 20 ta belgidan oshirmaymiz
-   */
-  state.name = name.slice(0, 20);
+  const rows = (
+    state.players.length
+      ? state.players
+      : [
+          {
+            name:
+              state.name || "Siz",
+            color: "#ef3340",
+            area:
+              Number(
+                localStorage.getItem(
+                  "izlaArea"
+                )
+              ) || 0
+          }
+        ]
+  ).sort(
+    (a, b) =>
+      Number(b.area || 0) -
+      Number(a.area || 0)
+  );
 
-  /*
-   * Yangi ZONEX kaliti
-   */
+  $("#leaderRows").innerHTML =
+    rows
+      .map(
+        (player, index) => `
+        <div class="leader-row">
+          <b>${index + 1}</b>
+
+          <i style="
+            background:${
+              player.color ||
+              colors[
+                index %
+                  colors.length
+              ]
+            };
+          "></i>
+
+          <span>
+            ${esc(
+              player.name
+            )}
+          </span>
+
+          <strong>
+            ${Math.round(
+              Number(
+                player.area || 0
+              )
+            ).toLocaleString()}
+            m²
+          </strong>
+        </div>
+      `
+      )
+      .join("");
+}
+
+/* =========================
+   ISM / NIK
+========================= */
+
+function saveName(name) {
+  state.name =
+    String(name)
+      .trim()
+      .slice(0, 30);
+
   localStorage.setItem(
-    'zonexName',
+    "izlaName",
     state.name
   );
 
-  /*
-   * Eski kalit ham saqlanadi
-   * — eski foydalanuvchi yo'qolmaydi
-   */
-  localStorage.setItem(
-    'izlaName',
-    state.name
-  );
-
-  if ($('#avatarLetter')) {
-    $('#avatarLetter').textContent =
-      state.name[0].toUpperCase();
+  if ($("#nameInput")) {
+    $("#nameInput").value =
+      state.name;
   }
 
-  if ($('#welcomeModal')) {
-    $('#welcomeModal')
-      .classList
-      .remove('active');
+  if ($("#avatarLetter")) {
+    $("#avatarLetter").textContent =
+      state.name
+        ? state.name[0].toUpperCase()
+        : "?";
   }
-
-  if ($('#locationModal')) {
-    $('#locationModal')
-      .classList
-      .add('active');
-  }
-
-  renderBoard();
-
-  return true;
 }
 
-/* =========================================================
-   Tugmalar
-   ========================================================= */
+if ($("#continueBtn")) {
+  $("#continueBtn").onclick =
+    () => {
+      const name =
+        $("#nameInput")
+          ?.value
+          .trim();
 
-if ($('#continueBtn')) {
-  $('#continueBtn').onclick =
-    saveName;
+      if (!name) {
+        $("#nameError")?.classList.add(
+          "show"
+        );
+
+        $("#nameInput")?.focus();
+
+        return;
+      }
+
+      saveName(name);
+
+      $("#nameError")?.classList.remove(
+        "show"
+      );
+
+      $("#welcomeModal")?.classList.remove(
+        "active"
+      );
+
+      $("#locationModal")?.classList.add(
+        "active"
+      );
+
+      renderBoard();
+    };
 }
 
-if ($('#nameInput')) {
-  $('#nameInput').onkeydown =
+if ($("#nameInput")) {
+  $("#nameInput").onkeydown =
     (event) => {
-      if (event.key === 'Enter') {
-        saveName();
+      if (
+        event.key === "Enter"
+      ) {
+        $("#continueBtn")?.click();
       }
     };
 
-  $('#nameInput').oninput = () => {
-    if ($('#nameError')) {
-      $('#nameError')
-        .classList
-        .remove('show');
-    }
-  };
+  $("#nameInput").oninput =
+    () => {
+      $("#nameError")?.classList.remove(
+        "show"
+      );
+    };
 }
 
-if ($('#allowBtn')) {
-  $('#allowBtn').onclick =
+/* =========================
+   TUGMALAR
+========================= */
+
+if ($("#allowBtn")) {
+  $("#allowBtn").onclick =
     requestLocation;
 }
 
-if ($('#startBtn')) {
-  $('#startBtn').onclick = () => {
-    if (state.active) {
-      finishWalk();
-    } else {
-      startWalk();
-    }
-  };
+if ($("#startBtn")) {
+  $("#startBtn").onclick =
+    () => {
+      if (state.active) {
+        finishWalk();
+      } else {
+        startWalk();
+      }
+    };
 }
 
-if ($('#locateBtn')) {
-  $('#locateBtn').onclick = () => {
-    if (
-      state.marker &&
-      state.map
-    ) {
-      state.map.flyTo(
-        state.marker.getLatLng(),
-        17
+if ($("#locateBtn")) {
+  $("#locateBtn").onclick =
+    () => {
+      if (
+        state.marker &&
+        state.map
+      ) {
+        state.map.flyTo(
+          state.marker.getLatLng(),
+          17
+        );
+      } else {
+        requestLocation();
+      }
+    };
+}
+
+if ($("#rankBtn")) {
+  $("#rankBtn").onclick =
+    () => {
+      $("#leaderboard")?.classList.toggle(
+        "open"
       );
-    } else {
-      requestLocation();
-    }
-  };
+    };
 }
 
-if ($('#rankBtn')) {
-  $('#rankBtn').onclick = () => {
-    if ($('#leaderboard')) {
-      $('#leaderboard')
-        .classList
-        .toggle('open');
-    }
-  };
+if ($("#closeBoard")) {
+  $("#closeBoard").onclick =
+    () => {
+      $("#leaderboard")?.classList.remove(
+        "open"
+      );
+    };
 }
 
-if ($('#closeBoard')) {
-  $('#closeBoard').onclick = () => {
-    if ($('#leaderboard')) {
-      $('#leaderboard')
-        .classList
-        .remove('open');
-    }
-  };
+/* =========================
+   SAQLANGAN NIK
+========================= */
+
+const savedName =
+  localStorage.getItem(
+    "izlaName"
+  );
+
+if (savedName) {
+  saveName(savedName);
 }
 
-/* =========================================================
-   Sahifa yuklanganda
-   ========================================================= */
+if ($("#totalArea")) {
+  $("#totalArea").textContent =
+    Math.round(
+      Number(
+        localStorage.getItem(
+          "izlaArea"
+        )
+      ) || 0
+    ).toLocaleString();
+}
 
-(function boot() {
-  /*
-   * Saqlangan nik
-   */
-  const saved =
-    localStorage.getItem('zonexName') ||
-    localStorage.getItem('izlaName');
+/* =========================
+   START
+========================= */
 
-  if (saved) {
-    state.name = saved;
+document.addEventListener(
+  "DOMContentLoaded",
+  () => {
+    /*
+      Agar ism oldindan saqlangan
+      bo'lsa, server bilan
+      ishlashni boshlaymiz.
+    */
 
-    if ($('#nameInput')) {
-      $('#nameInput').value =
-        saved;
+    if (state.name) {
+      initMap();
+      fetchWorld();
     }
-
-    if ($('#avatarLetter')) {
-      $('#avatarLetter').textContent =
-        saved[0].toUpperCase();
-    }
   }
-
-  /*
-   * Saqlangan maydon
-   */
-  const savedArea =
-    Number(
-      localStorage.getItem('zonexArea') ||
-      localStorage.getItem('izlaArea')
-    ) || 0;
-
-  if ($('#totalArea')) {
-    $('#totalArea').textContent =
-      Math.round(
-        savedArea
-      ).toLocaleString();
-  }
-
-  /*
-   * Xarita mavjud bo'lsa ishga tushiramiz
-   */
-  if ($('#map')) {
-    initMap();
-  }
-
-  renderBoard();
-})();
+);
