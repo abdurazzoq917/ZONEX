@@ -8,18 +8,19 @@
 // 2. Yangi hudud yaratish
 // 3. Hudud nuqtalarini tekshirish
 // 4. Hududlar kesishishini aniqlash
-// 5. Boshqa o'yinchining hududini bosib olishni qayd qilish
+// 5. Boshqa o'yinchining hududini bosib olish
 // 6. Foydalanuvchining umumiy maydonini hisoblash
-// 7. Ma'lumotlarni umumiy store orqali saqlash
+// 7. Foydalanuvchiga ID bo'yicha barqaror rang berish
+// 8. Ma'lumotlarni umumiy store orqali saqlash
 //
 // Muhim:
-// Ma'lumotlar faqat shu faylda saqlanmaydi.
-// api/_store.js orqali doimiy saqlash mexanizmi ishlaydi.
+// Bir xil ID = bir xil rang.
+// Boshqa ID = boshqa rang.
 // ============================================================
 
 const crypto = require("crypto");
 
-// Umumiy ma'lumotlar ombori
+// Umumiy store
 const store = require("./_store");
 
 // ============================================================
@@ -27,7 +28,10 @@ const store = require("./_store");
 // ============================================================
 
 function setCors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader(
+    "Access-Control-Allow-Origin",
+    "*"
+  );
 
   res.setHeader(
     "Access-Control-Allow-Methods",
@@ -64,7 +68,6 @@ function json(res, status, data) {
 // ============================================================
 
 async function readBody(req) {
-  // Vercel ba'zan body'ni oldindan parse qilib beradi
   if (
     req.body &&
     typeof req.body === "object"
@@ -78,10 +81,14 @@ async function readBody(req) {
     req.on("data", chunk => {
       body += chunk;
 
-      // 2 MB dan katta requestni qabul qilmaymiz
-      if (body.length > 2 * 1024 * 1024) {
+      if (
+        body.length >
+        2 * 1024 * 1024
+      ) {
         reject(
-          new Error("So'rov juda katta")
+          new Error(
+            "So'rov juda katta"
+          )
         );
 
         req.destroy();
@@ -90,12 +97,12 @@ async function readBody(req) {
 
     req.on("end", () => {
       try {
-        const data = JSON.parse(
-          body || "{}"
+        resolve(
+          JSON.parse(
+            body || "{}"
+          )
         );
-
-        resolve(data);
-      } catch (error) {
+      } catch {
         reject(
           new Error(
             "JSON ma'lumot noto'g'ri"
@@ -109,31 +116,70 @@ async function readBody(req) {
 }
 
 // ============================================================
-// O'YINCHI RANGI
+// PLAYER RANGI
+// ============================================================
+//
+// MUHIM:
+//
+// Rang qurilmaning o'ziga emas,
+// PLAYER ID'siga bog'lanadi.
+//
+// Masalan:
+//
+// ID: abc123 -> ko'k
+// ID: xyz999 -> yashil
+// ID: phone777 -> binafsha
+//
+// Shu ID qayta kirsa ham rang o'zgarmaydi.
 // ============================================================
 
 function playerColor(id) {
+  const colors = [
+    "#2563EB", // Ko'k
+    "#16A34A", // Yashil
+    "#7C3AED", // Binafsha
+    "#EA580C", // To'q sariq
+    "#0891B2", // Havorang
+    "#DB2777", // Pushti
+    "#65A30D", // Yashil
+    "#9333EA", // Violet
+    "#0284C7", // Sky
+    "#CA8A04", // Sariq
+    "#DC2626", // Qizil
+    "#0F766E", // Teal
+    "#4F46E5", // Indigo
+    "#C2410C", // Orange
+    "#15803D", // Green
+    "#7E22CE"  // Purple
+  ];
+
+  const text = String(id);
+
   let hash = 0;
 
-  for (const char of String(id)) {
+  for (
+    let i = 0;
+    i < text.length;
+    i++
+  ) {
     hash =
       ((hash << 5) - hash) +
-      char.charCodeAt(0);
+      text.charCodeAt(i);
 
     hash |= 0;
   }
 
-  const hue =
-    Math.abs(hash) % 360;
+  const index =
+    Math.abs(hash) %
+    colors.length;
 
-  return `hsl(${hue} 72% 48%)`;
+  return colors[index];
 }
 
 // ============================================================
 // NUQTA TEKSHIRISH
 // ============================================================
 //
-// Nuqta:
 // [latitude, longitude]
 //
 // latitude  = -90 ... 90
@@ -195,11 +241,11 @@ function pointInPolygon(
     return false;
   }
 
-  // X = longitude
-  const x = Number(point[1]);
+  const x =
+    Number(point[1]);
 
-  // Y = latitude
-  const y = Number(point[0]);
+  const y =
+    Number(point[0]);
 
   let inside = false;
 
@@ -210,18 +256,26 @@ function pointInPolygon(
     j = i++
   ) {
     const xi =
-      Number(polygon[i][1]);
+      Number(
+        polygon[i][1]
+      );
 
     const yi =
-      Number(polygon[i][0]);
+      Number(
+        polygon[i][0]
+      );
 
     const xj =
-      Number(polygon[j][1]);
+      Number(
+        polygon[j][1]
+      );
 
     const yj =
-      Number(polygon[j][0]);
+      Number(
+        polygon[j][0]
+      );
 
-    const kesishadi =
+    const intersect =
       ((yi > y) !== (yj > y)) &&
       (
         x <
@@ -229,11 +283,14 @@ function pointInPolygon(
           (xj - xi) *
           (y - yi)
         ) /
-        ((yj - yi) || Number.EPSILON) +
+        (
+          (yj - yi) ||
+          Number.EPSILON
+        ) +
         xi
       );
 
-    if (kesishadi) {
+    if (intersect) {
       inside = !inside;
     }
   }
@@ -285,7 +342,6 @@ function segmentsIntersect(
   const c4 =
     cross(c, d, b);
 
-  // Oddiy holatda kesishish
   const first =
     (
       (c1 > 0 && c2 < 0) ||
@@ -298,33 +354,40 @@ function segmentsIntersect(
       (c3 < 0 && c4 > 0)
     );
 
-  if (first && second) {
+  if (
+    first &&
+    second
+  ) {
     return true;
   }
 
-  // Chegara ustida yotish holatlari
+  // Chegarada tegib qolish holati
   function onSegment(
     p,
     q,
     r
   ) {
     return (
-      q[0] >= Math.min(
-        p[0],
-        r[0]
-      ) &&
-      q[0] <= Math.max(
-        p[0],
-        r[0]
-      ) &&
-      q[1] >= Math.min(
-        p[1],
-        r[1]
-      ) &&
-      q[1] <= Math.max(
-        p[1],
-        r[1]
-      )
+      q[0] >=
+        Math.min(
+          p[0],
+          r[0]
+        ) &&
+      q[0] <=
+        Math.max(
+          p[0],
+          r[0]
+        ) &&
+      q[1] >=
+        Math.min(
+          p[1],
+          r[1]
+        ) &&
+      q[1] <=
+        Math.max(
+          p[1],
+          r[1]
+        )
     );
   }
 
@@ -383,7 +446,7 @@ function polygonsOverlap(
     return false;
   }
 
-  // 1. Chegaralari kesishadimi?
+  // 1. Chegaralar kesishishi
   for (
     let i = 0;
     i < polyA.length;
@@ -425,7 +488,7 @@ function polygonsOverlap(
     }
   }
 
-  // 2. A polygonning birinchi nuqtasi B ichidami?
+  // 2. A polygon B ichidami?
   if (
     pointInPolygon(
       polyA[0],
@@ -435,7 +498,7 @@ function polygonsOverlap(
     return true;
   }
 
-  // 3. B polygonning birinchi nuqtasi A ichidami?
+  // 3. B polygon A ichidami?
   if (
     pointInPolygon(
       polyB[0],
@@ -449,7 +512,7 @@ function polygonsOverlap(
 }
 
 // ============================================================
-// STORE'DAN WORLD OLISH
+// WORLD OLISH
 // ============================================================
 
 function getWorld() {
@@ -470,7 +533,6 @@ function getWorld() {
     return global.__IZLA_WORLD__;
   }
 
-  // Agar hali world mavjud bo'lmasa
   global.__IZLA_WORLD__ = {
     players: []
   };
@@ -512,8 +574,8 @@ async function saveWorld(
     );
   }
 
-  // Zaxira varianti
-  store.world = world;
+  store.world =
+    world;
 
   global.__IZLA_WORLD__ =
     world;
@@ -522,7 +584,7 @@ async function saveWorld(
 }
 
 // ============================================================
-// PLAYER TOPISH YOKI YARATISH
+// PLAYER TOPISH / YARATISH
 // ============================================================
 
 function getPlayer(
@@ -545,26 +607,27 @@ function getPlayer(
         String(id)
     );
 
-  // Agar player topilmasa
-  // yangi player yaratamiz
+  // Yangi player
   if (!player) {
     player = {
       id: String(id),
 
-      name: String(
-        name ||
-        "Noma'lum"
-      )
-        .trim()
-        .slice(0, 30),
+      name:
+        String(
+          name ||
+          "Noma'lum"
+        )
+          .trim()
+          .slice(0, 30),
 
+      // ID asosida rang
       color:
         playerColor(id),
 
-      // Umumiy egallangan maydon
+      // Umumiy hudud maydoni
       area: 0,
 
-      // Barcha hududlar
+      // Hududlar
       territories: [],
 
       // Oxirgi joylashuv
@@ -574,10 +637,12 @@ function getPlayer(
       totalDistance: 0,
 
       // Oxirgi yangilanish
-      updatedAt: Date.now(),
+      updatedAt:
+        Date.now(),
 
-      // Player yaratilgan vaqt
-      createdAt: Date.now()
+      // Yaratilgan vaqt
+      createdAt:
+        Date.now()
     };
 
     world.players.push(
@@ -593,13 +658,17 @@ function getPlayer(
         .slice(0, 30);
   }
 
-  // Rang bo'lmasa yaratamiz
+  // Agar eski ma'lumotda
+  // rang bo'lmasa
   if (!player.color) {
     player.color =
-      playerColor(id);
+      playerColor(
+        player.id
+      );
   }
 
-  // territories array bo'lmasa
+  // Agar eski playerda
+  // territories bo'lmasa
   if (
     !Array.isArray(
       player.territories
@@ -608,7 +677,7 @@ function getPlayer(
     player.territories = [];
   }
 
-  // area noto'g'ri bo'lsa
+  // Area tekshirish
   if (
     !Number.isFinite(
       Number(player.area)
@@ -617,7 +686,7 @@ function getPlayer(
     player.area = 0;
   }
 
-  // Masofa bo'lmasa
+  // Masofa tekshirish
   if (
     !Number.isFinite(
       Number(
@@ -632,7 +701,7 @@ function getPlayer(
 }
 
 // ============================================================
-// PLAYER UMUMIY MAYDONINI HISOBLASH
+// MAYDONNI QAYTA HISOBLASH
 // ============================================================
 
 function rebuildArea(
@@ -654,7 +723,8 @@ function rebuildArea(
       ) => {
         const area =
           Number(
-            territory.area || 0
+            territory.area ||
+            0
           );
 
         if (
@@ -672,7 +742,7 @@ function rebuildArea(
 }
 
 // ============================================================
-// HUDUDNI O'CHIRISH
+// HUDUD O'CHIRISH
 // ============================================================
 
 function removeTerritory(
@@ -696,7 +766,9 @@ function removeTerritory(
         String(
           territory.id
         ) !==
-        String(territoryId)
+        String(
+          territoryId
+        )
     );
 
   const removed =
@@ -704,47 +776,16 @@ function removeTerritory(
     oldLength;
 
   if (removed) {
-    rebuildArea(player);
+    rebuildArea(
+      player
+    );
   }
 
   return removed;
 }
 
 // ============================================================
-// HUDUDNI TOPISH
-// ============================================================
-
-function findTerritory(
-  world,
-  territoryId
-) {
-  for (
-    const player of
-    world.players || []
-  ) {
-    for (
-      const territory of
-      player.territories || []
-    ) {
-      if (
-        String(
-          territory.id
-        ) ===
-        String(territoryId)
-      ) {
-        return {
-          player,
-          territory
-        };
-      }
-    }
-  }
-
-  return null;
-}
-
-// ============================================================
-// YANGI HUDUD ID
+// HUDUD ID
 // ============================================================
 
 function createTerritoryId() {
@@ -766,7 +807,7 @@ function createTerritoryId() {
 }
 
 // ============================================================
-// API HANDLER
+// API
 // ============================================================
 
 module.exports =
@@ -776,22 +817,18 @@ module.exports =
   ) {
     setCors(res);
 
-    // --------------------------------------------------------
     // OPTIONS
-    // --------------------------------------------------------
-
     if (
       req.method ===
       "OPTIONS"
     ) {
-      res.statusCode = 204;
+      res.statusCode =
+        204;
+
       return res.end();
     }
 
-    // --------------------------------------------------------
-    // FAQAT POST
-    // --------------------------------------------------------
-
+    // Faqat POST
     if (
       req.method !==
       "POST"
@@ -807,16 +844,16 @@ module.exports =
     }
 
     try {
-      // ------------------------------------------------------
+      // ======================================================
       // BODY
-      // ------------------------------------------------------
+      // ======================================================
 
       const body =
         await readBody(req);
 
-      // ------------------------------------------------------
-      // PLAYER MA'LUMOTLARI
-      // ------------------------------------------------------
+      // ======================================================
+      // PLAYER
+      // ======================================================
 
       const id =
         String(
@@ -828,9 +865,9 @@ module.exports =
           body.name || ""
         ).trim();
 
-      // ------------------------------------------------------
-      // NUQTALAR
-      // ------------------------------------------------------
+      // ======================================================
+      // POINTS
+      // ======================================================
 
       let points =
         Array.isArray(
@@ -839,18 +876,18 @@ module.exports =
           ? body.points
           : [];
 
-      // ------------------------------------------------------
-      // MAYDON
-      // ------------------------------------------------------
+      // ======================================================
+      // AREA
+      // ======================================================
 
       const area =
         Number(
           body.area || 0
         );
 
-      // ------------------------------------------------------
+      // ======================================================
       // ID TEKSHIRISH
-      // ------------------------------------------------------
+      // ======================================================
 
       if (!id) {
         return json(
@@ -863,9 +900,9 @@ module.exports =
         );
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // NAME TEKSHIRISH
-      // ------------------------------------------------------
+      // ======================================================
 
       if (!name) {
         return json(
@@ -878,9 +915,9 @@ module.exports =
         );
       }
 
-      // ------------------------------------------------------
-      // NUQTALAR SONI
-      // ------------------------------------------------------
+      // ======================================================
+      // NUQTA SONI
+      // ======================================================
 
       if (
         points.length < 3
@@ -895,9 +932,9 @@ module.exports =
         );
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // NUQTALARNI TOZALASH
-      // ------------------------------------------------------
+      // ======================================================
 
       points =
         points
@@ -909,15 +946,11 @@ module.exports =
             5000
           )
           .map(
-            point => [
-              Number(point[0]),
-              Number(point[1])
+            p => [
+              Number(p[0]),
+              Number(p[1])
             ]
           );
-
-      // ------------------------------------------------------
-      // QAYTA TEKSHIRISH
-      // ------------------------------------------------------
 
       if (
         points.length < 3
@@ -932,9 +965,9 @@ module.exports =
         );
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // AREA XAVFSIZ QIYMATI
-      // ------------------------------------------------------
+      // ======================================================
 
       const safeArea =
         Math.max(
@@ -949,9 +982,9 @@ module.exports =
           )
         );
 
-      // ------------------------------------------------------
+      // ======================================================
       // WORLD
-      // ------------------------------------------------------
+      // ======================================================
 
       const world =
         getWorld();
@@ -961,12 +994,13 @@ module.exports =
           world.players
         )
       ) {
-        world.players = [];
+        world.players =
+          [];
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // PLAYER
-      // ------------------------------------------------------
+      // ======================================================
 
       const player =
         getPlayer(
@@ -975,30 +1009,31 @@ module.exports =
           name
         );
 
-      // ------------------------------------------------------
+      // ======================================================
       // YANGI HUDUD ID
-      // ------------------------------------------------------
+      // ======================================================
 
       const territoryId =
         createTerritoryId();
 
-      // ------------------------------------------------------
+      // ======================================================
       // BOSIB OLINGAN HUDUDLAR
-      // ------------------------------------------------------
+      // ======================================================
 
       const captured = [];
 
-      // Boshqa playerlarning hududlarini ko'ramiz
       for (
         const otherPlayer of
         world.players
       ) {
-        // O'z hududimizni tekshirmaymiz
+        // O'zimizni tekshirmaymiz
         if (
           String(
             otherPlayer.id
           ) ===
-          String(player.id)
+          String(
+            player.id
+          )
         ) {
           continue;
         }
@@ -1023,39 +1058,36 @@ module.exports =
             continue;
           }
 
-          const overlap =
+          if (
             polygonsOverlap(
               points,
               oldTerritory.points
-            );
+            )
+          ) {
+            captured.push({
+              territoryId:
+                oldTerritory.id ||
+                null,
 
-          if (!overlap) {
-            continue;
+              ownerId:
+                otherPlayer.id,
+
+              ownerName:
+                otherPlayer.name,
+
+              area:
+                Number(
+                  oldTerritory.area ||
+                  0
+                )
+            });
           }
-
-          captured.push({
-            territoryId:
-              oldTerritory.id ||
-              null,
-
-            ownerId:
-              otherPlayer.id,
-
-            ownerName:
-              otherPlayer.name,
-
-            area:
-              Number(
-                oldTerritory.area ||
-                0
-              )
-          });
         }
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // YANGI HUDUD
-      // ------------------------------------------------------
+      // ======================================================
 
       const territory = {
         id:
@@ -1067,45 +1099,36 @@ module.exports =
         ownerName:
           player.name,
 
+        // ID asosidagi rang
         color:
           player.color,
 
-        // Polygon nuqtalari
         points,
 
-        // Hudud maydoni
         area:
           safeArea,
 
-        // Yaratilgan vaqt
         createdAt:
           Date.now(),
 
-        // Qaysi hududlarni bosib oldi
         captured
       };
 
-      // ------------------------------------------------------
-      // HUDUDNI PLAYERGA QO'SHISH
-      // ------------------------------------------------------
+      // ======================================================
+      // HUDUDNI QO'SHISH
+      // ======================================================
 
       player.territories.push(
         territory
       );
 
-      // Umumiy maydonni qayta hisoblash
       rebuildArea(
         player
       );
 
-      // ------------------------------------------------------
+      // ======================================================
       // BOSIB OLINGAN HUDUDLARNI O'CHIRISH
-      // ------------------------------------------------------
-      //
-      // Bu yerda haqiqiy capture ishlaydi.
-      // Yangi hudud boshqa player hududiga tegsa,
-      // eski hudud o'chiriladi.
-      //
+      // ======================================================
 
       for (
         const capturedTerritory
@@ -1121,7 +1144,9 @@ module.exports =
         const oldOwner =
           world.players.find(
             p =>
-              String(p.id) ===
+              String(
+                p.id
+              ) ===
               String(
                 capturedTerritory.ownerId
               )
@@ -1133,47 +1158,69 @@ module.exports =
 
         removeTerritory(
           oldOwner,
-          capturedTerritory.territoryId
+          capturedTerritory
+            .territoryId
         );
       }
 
-      // ------------------------------------------------------
-      // PLAYER MAYDONINI YANA HISOBLASH
-      // ------------------------------------------------------
-
-      rebuildArea(
-        player
-      );
-
-      // ------------------------------------------------------
-      // BARCHA PLAYERLAR MAYDONINI TEKSHIRISH
-      // ------------------------------------------------------
+      // ======================================================
+      // HAMMA PLAYERLAR MAYDONINI YANGILASH
+      // ======================================================
 
       for (
         const p of
         world.players
       ) {
         rebuildArea(p);
+
+        // Eski playerlarda rang noto'g'ri
+        // yoki yo'q bo'lsa ID bo'yicha tiklaymiz
+        p.color =
+          playerColor(
+            p.id
+          );
+
+        // Eski hududlarda ham rangni
+        // player rangiga tenglaymiz
+        if (
+          Array.isArray(
+            p.territories
+          )
+        ) {
+          for (
+            const t of
+            p.territories
+          ) {
+            t.color =
+              p.color;
+
+            t.ownerId =
+              p.id;
+
+            t.ownerName =
+              p.name;
+          }
+        }
       }
 
-      // ------------------------------------------------------
-      // YANGILANISH VAQTI
-      // ------------------------------------------------------
+      // ======================================================
+      // PLAYER YANGILANISH VAQTI
+      // ======================================================
 
       player.updatedAt =
         Date.now();
 
-      // ------------------------------------------------------
+      // ======================================================
       // SAQLASH
-      // ------------------------------------------------------
+      // ======================================================
 
       await saveWorld(
         world
       );
 
-      // ------------------------------------------------------
+      // ======================================================
       // JAVOB
-      // ------------------------------------------------------
+      // ======================================================
 
       return json(
         res,
@@ -1183,7 +1230,7 @@ module.exports =
 
           message:
             captured.length > 0
-              ? "Yangi hudud yaratildi va kesishgan hududlar bosib olindi."
+              ? "Yangi hudud yaratildi va boshqa hududlar bosib olindi."
               : "Yangi hudud muvaffaqiyatli yaratildi.",
 
           player: {
@@ -1203,23 +1250,24 @@ module.exports =
               Number(
                 player.totalDistance ||
                 0
-              )
+              ),
+
+            location:
+              player.location ||
+              null
           },
 
           territory,
 
           captured,
 
-          // Frontend xaritani yangilashi uchun
+          // Frontend barcha odamlarni
+          // qayta chizishi uchun
           world
         }
       );
 
     } catch (error) {
-      // ------------------------------------------------------
-      // SERVER XATOSI
-      // ------------------------------------------------------
-
       console.error(
         "TERRITORY API XATOSI:",
         error
