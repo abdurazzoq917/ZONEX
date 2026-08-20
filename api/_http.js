@@ -36,6 +36,13 @@ function preflight(req, res) {
   return true;
 }
 
+// 400 bilan qaytadigan xato (server xatosi emas, klient xatosi)
+function badJson() {
+  const error = new Error("JSON noto'g'ri");
+  error.status = 400;
+  return error;
+}
+
 async function readBody(req) {
   if (req.body && typeof req.body === "object") {
     return req.body;
@@ -45,7 +52,7 @@ async function readBody(req) {
     try {
       return JSON.parse(req.body || "{}");
     } catch {
-      throw new Error("JSON noto'g'ri");
+      throw badJson();
     }
   }
 
@@ -56,7 +63,9 @@ async function readBody(req) {
       raw += chunk;
 
       if (raw.length > 2 * 1024 * 1024) {
-        reject(new Error("So'rov juda katta"));
+        const big = new Error("So'rov juda katta");
+        big.status = 413;
+        reject(big);
         req.destroy();
       }
     });
@@ -65,7 +74,7 @@ async function readBody(req) {
       try {
         resolve(JSON.parse(raw || "{}"));
       } catch {
-        reject(new Error("JSON noto'g'ri"));
+        reject(badJson());
       }
     });
 

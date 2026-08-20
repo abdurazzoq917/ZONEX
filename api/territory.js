@@ -249,8 +249,8 @@ module.exports = async function handler(req, res) {
   } catch (error) {
     console.error("TERRITORY API XATOSI:", error);
 
-    return json(res, 500, {
-      error: "Serverda xatolik",
+    return json(res, (error && error.status) || 500, {
+      error: (error && error.status) ? error.message : "Serverda xatolik",
       message: error && error.message
     });
   }

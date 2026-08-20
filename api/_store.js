@@ -240,6 +240,8 @@ function cleanPoints(points) {
 
 function normalizeName(name) {
   return String(name || "")
+    // Teg va tirnoq belgilari ismda kerak emas (XSS'ga qarshi qo'sh himoya)
+    .replace(/[<>"'`\\]/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 20);
