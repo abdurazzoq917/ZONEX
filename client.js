@@ -1,99 +1,206 @@
+// client.js
+// ============================================================
+// ZONEX — brauzer qismi
+// ============================================================
+//
+//  - Ism faqat BIR MARTA so'raladi
+//  - Bitta qurilma = bitta akkaunt
+//  - Odamlar bir-birini jonli ko'radi
+//  - Har kimning rangi qurilma ID'sidan (hech kimda bir xil emas)
+//  - Hududlar serverda saqlanadi, chiqib kirsangiz ham qolaveradi
+//  - Begona hududni bosib olish mumkin
+//  - Mashina / velosiped / samokat tezligida hudud yozilmaydi
+// ============================================================
+
 const $ = (s) => document.querySelector(s);
 
+// ============================================================
+// SOZLAMALAR
+// ============================================================
+
+const CONFIG = {
+  // Piyoda yurish chegarasi (km/soat).
+  // Bundan tez — transport hisoblanadi, hudud yozilmaydi.
+  MAX_SPEED_KMH: 12,
+
+  // Butun aylanish bo'yicha o'rtacha tezlik (km/soat)
+  MAX_AVG_SPEED_KMH: 10,
+
+  // GPS aniqligi shundan yomon bo'lsa — nuqta hisobga olinmaydi
+  MAX_ACCURACY: 60,
+
+  // Ikki nuqta orasidagi eng kichik masofa (metr)
+  MIN_STEP: 4,
+
+  // Transportda ketib qolgan bo'lsa, shu masofadan keyin
+  // yurish qaytadan boshlanadi (metr)
+  RESET_JUMP: 90,
+
+  // Boshlang'ich nuqtaga qaytish radiusi (metr)
+  CLOSE_RADIUS: 20,
+
+  // Serverga joylashuv yuborish oralig'i (ms)
+  SEND_MS: 3000,
+
+  // Dunyoni yangilash oralig'i (ms)
+  POLL_MS: 3000,
+
+  // Odam onlayn hisoblanadigan vaqt (ms)
+  ONLINE_MS: 120000
+};
+
+// ============================================================
+// QURILMA ID — bitta qurilma, bitta akkaunt
+// ============================================================
+//
+// localStorage tozalansa ham cookie'dan tiklanadi.
+// ============================================================
+
+function readCookie(key) {
+  const found = document.cookie
+    .split(";")
+    .map((row) => row.trim())
+    .find((row) => row.startsWith(key + "="));
+
+  return found ? decodeURIComponent(found.slice(key.length + 1)) : "";
+}
+
+function writeCookie(key, value) {
+  const tenYears = 60 * 60 * 24 * 365 * 10;
+
+  document.cookie =
+    key +
+    "=" +
+    encodeURIComponent(value) +
+    ";max-age=" +
+    tenYears +
+    ";path=/;SameSite=Lax";
+}
+
+function loadStored(key) {
+  try {
+    return localStorage.getItem(key) || readCookie(key) || "";
+  } catch {
+    return readCookie(key);
+  }
+}
+
+function saveStored(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* private rejim */
+  }
+
+  writeCookie(key, value);
+}
+
+function deviceId() {
+  let id = loadStored("zonexId");
+
+  if (!id) {
+    id =
+      crypto && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Date.now().toString(36) + Math.random().toString(36).slice(2);
+
+    saveStored("zonexId", id);
+  }
+
+  return id;
+}
+
+// ============================================================
+// HOLAT
+// ============================================================
+
 const state = {
-  name: localStorage.getItem("izlaName") || "",
-  userId:
-    localStorage.getItem("izlaUserId") ||
-    (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
+  id: deviceId(),
+  name: loadStored("zonexName"),
+  color: loadStored("zonexColor") || "#1246d8",
 
   map: null,
   marker: null,
-  accuracy: null,
-  watching: null,
+  accuracyRing: null,
 
+  watchId: null,
+  lastFix: null,
+  lastSent: 0,
+  speed: 0,
+
+  // yurish
   active: false,
   started: 0,
   points: [],
+  distance: 0,
+  maxSpeed: 0,
+  tooFast: false,
   line: null,
   preview: null,
 
-  distance: 0,
-  timer: null,
-
-  onlineLayers: [],
-  playerMarkers: [],
-  lastSent: 0,
-
-  players: []
+  // dunyo
+  players: [],
+  zoneLayers: [],
+  zoneKey: "",
+  markers: new Map(),
+  worldTimer: null,
+  liveOpen: false
 };
 
-localStorage.setItem("izlaUserId", state.userId);
+// ============================================================
+// YORDAMCHILAR
+// ============================================================
 
-const colors = [
-  "#ef3340",
-  "#1246d8",
-  "#782fd1",
-  "#f29c16",
-  "#00a878",
-  "#ff5c35",
-  "#8e44ad",
-  "#16a085"
-];
+function toast(message) {
+  const box = $("#toast");
 
-/* =========================
-   YORDAMCHI FUNKSIYALAR
-========================= */
+  if (!box) return;
 
-function toast(msg) {
-  const t = $("#toast");
+  box.textContent = message;
+  box.classList.add("show");
 
-  if (!t) return;
+  clearTimeout(box._timer);
 
-  t.textContent = msg;
-  t.classList.add("show");
-
-  clearTimeout(t._x);
-
-  t._x = setTimeout(() => {
-    t.classList.remove("show");
-  }, 2600);
+  box._timer = setTimeout(() => box.classList.remove("show"), 3200);
 }
 
-function esc(v) {
-  return String(v || "").replace(/[<>&"']/g, (c) => {
-    return {
-      "<": "&lt;",
-      ">": "&gt;",
-      "&": "&amp;",
-      '"': "&quot;",
-      "'": "&#039;"
-    }[c];
-  });
+function esc(value) {
+  return String(value == null ? "" : value).replace(
+    /[<>&"']/g,
+    (c) =>
+      ({
+        "<": "&lt;",
+        ">": "&gt;",
+        "&": "&amp;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[c])
+  );
 }
 
 function hav(a, b) {
   const R = 6371000;
-  const p = Math.PI / 180;
+  const rad = Math.PI / 180;
 
-  const d1 = (b[0] - a[0]) * p;
-  const d2 = (b[1] - a[1]) * p;
+  const dLat = (b[0] - a[0]) * rad;
+  const dLng = (b[1] - a[1]) * rad;
 
   const x =
-    Math.sin(d1 / 2) ** 2 +
-    Math.cos(a[0] * p) *
-      Math.cos(b[0] * p) *
-      Math.sin(d2 / 2) ** 2;
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLng / 2) ** 2;
 
-  return 2 * R * Math.asin(Math.sqrt(x));
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(x)));
 }
 
 function polygonArea(points) {
   if (points.length < 3) return 0;
 
-  const lat =
-    (points.reduce((s, p) => s + p[0], 0) / points.length) *
-    Math.PI /
+  const midLat =
+    ((points.reduce((sum, p) => sum + p[0], 0) / points.length) * Math.PI) /
     180;
+
+  const kx = 111320 * Math.cos(midLat);
+  const ky = 110540;
 
   let sum = 0;
 
@@ -101,1200 +208,1051 @@ function polygonArea(points) {
     const a = points[i];
     const b = points[(i + 1) % points.length];
 
-    sum +=
-      a[1] *
-        111320 *
-        Math.cos(lat) *
-        b[0] *
-        110540 -
-      b[1] *
-        111320 *
-        Math.cos(lat) *
-        a[0] *
-        110540;
+    sum += a[1] * kx * (b[0] * ky) - b[1] * kx * (a[0] * ky);
   }
 
   return Math.abs(sum / 2);
 }
 
-/* =========================
-   MAP
-========================= */
+// Rang — server bilan bir xil formula (qurilma ID bo'yicha)
+function colorFromId(id) {
+  let hash = 2166136261;
 
-function initMap(center = [41.3111, 69.2797]) {
+  const text = String(id);
+
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  hash = Math.abs(hash | 0);
+
+  const hue = Math.round((hash * 137.508) % 360);
+  const sat = 62 + (hash % 4) * 6;
+  const light = 42 + ((hash >> 3) % 3) * 5;
+
+  return "hsl(" + hue + " " + sat + "% " + light + "%)";
+}
+
+function applyColor(color) {
+  const next = color || colorFromId(state.id);
+
+  if (next === state.color && $("#profileBtn")?.style.background) return;
+
+  state.color = next;
+
+  saveStored("zonexColor", state.color);
+
+  const avatar = $("#profileBtn");
+
+  if (avatar) avatar.style.background = state.color;
+
+  if (state.marker) {
+    state.marker.setStyle({ fillColor: state.color });
+  }
+}
+
+// ============================================================
+// XARITA
+// ============================================================
+
+function initMap(center) {
   if (state.map) return;
 
   state.map = L.map("map", {
     zoomControl: false,
     attributionControl: true
-  }).setView(center, 16);
+  }).setView(center || [41.3111, 69.2797], 16);
 
-  L.tileLayer(
-    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    {
-      maxZoom: 20,
-      attribution: "© OpenStreetMap"
-    }
-  ).addTo(state.map);
-
-  connectOnline();
-  renderBoard();
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 20,
+    attribution: "© OpenStreetMap"
+  }).addTo(state.map);
 }
 
-/* =========================
-   ONLINE ODAMLAR
-========================= */
-
-function clearOnline() {
-  state.onlineLayers.forEach((layer) => {
+function clearZones() {
+  state.zoneLayers.forEach((layer) => {
     try {
       layer.remove();
-    } catch {}
+    } catch {
+      /* xarita yopilgan bo'lishi mumkin */
+    }
   });
 
-  state.onlineLayers = [];
-  state.playerMarkers = [];
+  state.zoneLayers = [];
 }
 
-function playerColor(player, index) {
-  return player.color || colors[index % colors.length];
-}
+// ============================================================
+// DUNYONI CHIZISH
+// ============================================================
 
-function createPlayerMarker(player, color) {
-  if (!state.map || !player.location) return null;
-
-  const lat = Number(player.location.lat);
-  const lng = Number(player.location.lng);
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return null;
-  }
-
-  /*
-    Nik + rangli nuqta
-  */
-
-  const icon = L.divIcon({
+function playerIcon(player) {
+  return L.divIcon({
     className: "zonex-player-marker",
 
-    html: `
-      <div style="
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        pointer-events:none;
-      ">
-
-        <div style="
-          background:${color};
-          width:16px;
-          height:16px;
-          border-radius:50%;
-          border:3px solid white;
-          box-shadow:0 2px 8px rgba(0,0,0,.45);
-        "></div>
-
-        <div style="
-          margin-top:3px;
-          padding:3px 8px;
-          border-radius:999px;
-          background:rgba(0,0,0,.78);
-          color:white;
-          font-weight:800;
-          font-size:12px;
-          white-space:nowrap;
-          box-shadow:0 2px 7px rgba(0,0,0,.3);
-        ">
-          ${esc(player.name)}
-        </div>
-
-      </div>
-    `,
+    html:
+      '<div class="zx-player">' +
+      '<span class="zx-dot" style="background:' +
+      esc(player.color || colorFromId(player.id)) +
+      '"></span>' +
+      '<span class="zx-name">' +
+      esc(player.name) +
+      "</span>" +
+      "</div>",
 
     iconSize: [1, 1],
     iconAnchor: [0, 0]
   });
-
-  const marker = L.marker(
-    [lat, lng],
-    {
-      icon,
-      interactive: true
-    }
-  )
-    .addTo(state.map)
-    .bindTooltip(esc(player.name), {
-      direction: "top"
-    });
-
-  return marker;
 }
 
-/* =========================
-   ONLINE DATA
-========================= */
+function playerMarker(player) {
+  const lat = Number(player.location.lat);
+  const lng = Number(player.location.lng);
 
-function renderOnline(data) {
-  if (!state.map) return;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
-  clearOnline();
+  return L.marker([lat, lng], {
+    icon: playerIcon(player),
+    interactive: true
+  }).addTo(state.map);
+}
 
-  state.players = Array.isArray(data.players)
-    ? data.players
-    : [];
+// Hududlar faqat o'zgarganda qayta chiziladi (miltillamasligi uchun)
+function zoneSignature(players) {
+  return players
+    .map(
+      (p) =>
+        p.id +
+        ":" +
+        p.name +
+        ":" +
+        (p.territories || []).map((t) => t.id).join(",")
+    )
+    .join("|");
+}
 
-  state.players.forEach((player, index) => {
-    const color = playerColor(player, index);
+function renderZones() {
+  clearZones();
 
-    /*
-      HUDUDLAR
-    */
+  state.players.forEach((player) => {
+    const color = player.color || colorFromId(player.id);
 
-    if (Array.isArray(player.territories)) {
-      player.territories.forEach((territory) => {
-        if (
-          !Array.isArray(territory.points) ||
-          territory.points.length < 3
-        ) {
-          return;
-        }
+    const isMe = String(player.id) === String(state.id);
 
-        const layer = L.polygon(
-          territory.points,
-          {
-            color,
-            fillColor: color,
-            fillOpacity: 0.25,
-            weight: 2
-          }
-        )
-          .addTo(state.map)
-          .bindTooltip(
-            esc(
-              territory.ownerName ||
-                player.name ||
-                "Noma'lum"
-            ),
-            {
-              sticky: true
-            }
-          );
-
-        state.onlineLayers.push(layer);
-      });
-    }
-
-    /*
-      ODAMNING JOYLASHUVI
-
-      O'zimizni boshqa marker bilan
-      ko'rsatmaymiz.
-    */
-
-    if (
-      String(player.id) !== String(state.userId) &&
-      player.location
-    ) {
-      const locationTime = Number(
-        player.location.time || 0
-      );
-
-      /*
-        2 daqiqadan eski joylashuvni
-        ko'rsatmaymiz.
-      */
-
-      if (
-        locationTime &&
-        Date.now() - locationTime > 120000
-      ) {
+    (player.territories || []).forEach((territory) => {
+      if (!Array.isArray(territory.points) || territory.points.length < 3) {
         return;
       }
 
-      const marker = createPlayerMarker(
-        player,
-        color
+      const polygon = L.polygon(territory.points, {
+        color,
+        fillColor: color,
+        fillOpacity: isMe ? 0.32 : 0.2,
+        weight: isMe ? 3 : 2
+      }).addTo(state.map);
+
+      polygon.bindTooltip(
+        '<span style="color:' +
+          esc(color) +
+          '">' +
+          esc(player.name) +
+          "</span>",
+        {
+          permanent: true,
+          direction: "center",
+          className: "owner-label"
+        }
       );
 
-      if (marker) {
-        state.onlineLayers.push(marker);
-        state.playerMarkers.push(marker);
+      state.zoneLayers.push(polygon);
+    });
+  });
+}
+
+// Odamlar markeri joyida siljitiladi, qayta yaratilmaydi
+function renderMarkers() {
+  const now = Date.now();
+
+  const alive = new Set();
+
+  state.players.forEach((player) => {
+    if (String(player.id) === String(state.id)) return;
+    if (!player.location) return;
+
+    const seen = Number(player.location.time || 0);
+
+    if (!seen || now - seen > CONFIG.ONLINE_MS) return;
+
+    const id = String(player.id);
+
+    alive.add(id);
+
+    const position = [
+      Number(player.location.lat),
+      Number(player.location.lng)
+    ];
+
+    const existing = state.markers.get(id);
+
+    if (existing) {
+      existing.marker.setLatLng(position);
+
+      if (existing.name !== player.name) {
+        existing.marker.setIcon(playerIcon(player));
+        existing.name = player.name;
       }
+
+      return;
+    }
+
+    const marker = playerMarker(player);
+
+    if (marker) {
+      state.markers.set(id, { marker, name: player.name });
     }
   });
 
-  /*
-    O'Z HUDUDIMIZ
-  */
+  // Chiqib ketganlarni olib tashlaymiz
+  state.markers.forEach((value, id) => {
+    if (alive.has(id)) return;
 
-  const mine = state.players.find(
-    (p) => String(p.id) === String(state.userId)
-  );
-
-  if (mine) {
-    if ($("#totalArea")) {
-      $("#totalArea").textContent =
-        Math.round(
-          Number(mine.area || 0)
-        ).toLocaleString();
+    try {
+      value.marker.remove();
+    } catch {
+      /* allaqachon olib tashlangan */
     }
 
-    localStorage.setItem(
-      "izlaArea",
-      Number(mine.area || 0)
-    );
-  }
-
-  renderBoard();
+    state.markers.delete(id);
+  });
 }
 
-/* =========================
-   SERVERDAN WORLD OLISH
-========================= */
+function renderWorld(players) {
+  if (!state.map) return;
+
+  state.players = Array.isArray(players) ? players : [];
+
+  const signature = zoneSignature(state.players);
+
+  if (signature !== state.zoneKey) {
+    state.zoneKey = signature;
+    renderZones();
+  }
+
+  renderMarkers();
+
+  updateMyCard();
+  renderBoard();
+  renderLive();
+}
+
+function myPlayer() {
+  return state.players.find((p) => String(p.id) === String(state.id));
+}
+
+function updateMyCard() {
+  const me = myPlayer();
+
+  const area = me ? Number(me.area || 0) : Number(loadStored("zonexArea")) || 0;
+
+  const rounded = Math.round(area);
+
+  if ($("#totalArea")) {
+    $("#totalArea").textContent = rounded.toLocaleString();
+  }
+
+  if (String(rounded) !== loadStored("zonexArea")) {
+    saveStored("zonexArea", String(rounded));
+  }
+
+  const count = me && me.territories ? me.territories.length : 0;
+
+  // Yurish paytida bu joyda hozirgi aylana ko'rsatiladi
+  if ($("#areaStatus") && !state.active) {
+    $("#areaStatus").textContent = count
+      ? count + " ta hudud sizniki"
+      : "Birinchi hududingizni egallang";
+  }
+
+  if (me && me.color) applyColor(me.color);
+
+  if ($("#levelBadge")) {
+    $("#levelBadge").textContent = String(
+      Math.max(1, Math.floor(area / 5000) + 1)
+    );
+  }
+}
+
+// ============================================================
+// SERVER
+// ============================================================
+
+async function api(url, body) {
+  const response = await fetch(url, {
+    method: body ? "POST" : "GET",
+    cache: "no-store",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined
+  });
+
+  let data = {};
+
+  try {
+    data = await response.json();
+  } catch {
+    /* javob JSON emas */
+  }
+
+  return { ok: response.ok, status: response.status, data };
+}
 
 async function fetchWorld() {
-  try {
-    const response = await fetch(
-      "/api/world?t=" + Date.now(),
-      {
-        cache: "no-store"
-      }
-    );
+  const { ok, data } = await api("/api/world?t=" + Date.now());
 
-    if (!response.ok) {
-      throw new Error("World API error");
-    }
-
-    const data = await response.json();
-
-    renderOnline(data);
-
-  } catch (error) {
-    console.log(
-      "World yuklanmadi:",
-      error
-    );
+  if (ok && Array.isArray(data.players)) {
+    renderWorld(data.players);
   }
 }
 
-/*
-  Har 2 sekundda boshqa
-  odamlarning joylashuvini yangilaymiz.
-*/
-
-function connectOnline() {
+function startPolling() {
   fetchWorld();
 
-  if (state.worldTimer) {
-    clearInterval(state.worldTimer);
-  }
+  clearInterval(state.worldTimer);
 
-  state.worldTimer = setInterval(
-    fetchWorld,
-    2000
-  );
+  state.worldTimer = setInterval(fetchWorld, CONFIG.POLL_MS);
 }
 
-/* =========================
-   LOCATION YUBORISH
-========================= */
-
-async function sendLocation(position) {
+async function sendLocation(point, accuracy) {
   if (!state.name) return;
 
-  /*
-    Juda ko'p request yubormaslik
-  */
-
-  if (
-    Date.now() - state.lastSent <
-    2000
-  ) {
-    return;
-  }
+  if (Date.now() - state.lastSent < CONFIG.SEND_MS) return;
 
   state.lastSent = Date.now();
 
-  try {
-    const response = await fetch(
-      "/api/location",
-      {
-        method: "POST",
+  const { ok, data } = await api("/api/location", {
+    id: state.id,
+    name: state.name,
+    lat: point[0],
+    lng: point[1],
+    accuracy
+  });
 
-        headers: {
-          "Content-Type":
-            "application/json"
-        },
-
-        body: JSON.stringify({
-          id: state.userId,
-          name: state.name,
-          lat: Number(position[0]),
-          lng: Number(position[1])
-        })
-      }
-    );
-
-    if (!response.ok) {
-      console.log(
-        "Location yuborilmadi"
-      );
-    }
-
-  } catch (error) {
-    console.log(
-      "Location server xatosi:",
-      error
-    );
+  if (ok && Array.isArray(data.players)) {
+    renderWorld(data.players);
   }
 }
 
-/* =========================
-   GPS
-========================= */
+// ============================================================
+// GPS
+// ============================================================
+
+function showSpeed(kmh) {
+  if ($("#speed")) {
+    $("#speed").innerHTML =
+      kmh.toFixed(1) + ' <small>km/soat</small>';
+  }
+}
+
+function speedWarning(show, kmh) {
+  const box = $("#speedWarn");
+
+  if (!box) return;
+
+  if (show) {
+    box.textContent =
+      "Juda tez (" +
+      kmh.toFixed(0) +
+      " km/soat) — hudud yozilmayapti. Piyoda yuring.";
+
+    box.classList.add("show");
+  } else {
+    box.classList.remove("show");
+  }
+}
 
 function onPosition(pos) {
-  const point = [
-    Number(pos.coords.latitude),
-    Number(pos.coords.longitude)
-  ];
+  const point = [Number(pos.coords.latitude), Number(pos.coords.longitude)];
+  const accuracy = Number(pos.coords.accuracy) || 999;
+  const stamp = Number(pos.timestamp) || Date.now();
 
-  const accuracy =
-    Number(pos.coords.accuracy) || 10;
+  if (!state.map) initMap(point);
 
-  if (!state.map) {
-    initMap(point);
-  }
-
-  /*
-    O'z markerimiz
-  */
-
+  // ---- o'z markerimiz ----
   if (!state.marker) {
-    state.marker =
-      L.circleMarker(point, {
-        radius: 8,
-        color: "#ffffff",
-        weight: 4,
-        fillColor: "#ef3340",
-        fillOpacity: 1
-      }).addTo(state.map);
+    state.marker = L.circleMarker(point, {
+      radius: 9,
+      color: "#ffffff",
+      weight: 4,
+      fillColor: state.color,
+      fillOpacity: 1
+    }).addTo(state.map);
 
-    state.accuracy =
-      L.circle(point, {
-        radius: accuracy,
-        color: "#1246d8",
-        weight: 1,
-        fillOpacity: 0.07
-      }).addTo(state.map);
+    state.accuracyRing = L.circle(point, {
+      radius: accuracy,
+      color: state.color,
+      weight: 1,
+      fillOpacity: 0.06
+    }).addTo(state.map);
 
-    state.map.setView(
-      point,
-      17
-    );
-
+    state.map.setView(point, 17);
   } else {
     state.marker.setLatLng(point);
 
-    if (state.accuracy) {
-      state.accuracy
-        .setLatLng(point)
-        .setRadius(accuracy);
+    if (state.accuracyRing) {
+      state.accuracyRing.setLatLng(point).setRadius(accuracy);
     }
   }
 
-  /*
-    Joylashuvni serverga yuborish
-  */
+  // ---- tezlik ----
+  let kmh = 0;
 
-  sendLocation(point);
+  if (state.lastFix) {
+    const seconds = (stamp - state.lastFix.time) / 1000;
+    const meters = hav(state.lastFix.point, point);
 
-  /*
-    Yurish boshlangan bo'lsa
-    nuqta qo'shamiz
-  */
+    if (seconds > 0.5) {
+      kmh = (meters / seconds) * 3.6;
+    }
+  }
+
+  // GPS sakrashi bo'lmasin
+  if (kmh > 200) kmh = state.speed;
+
+  // Silliqlash
+  state.speed = state.lastFix ? state.speed * 0.4 + kmh * 0.6 : kmh;
+
+  state.lastFix = { point, time: stamp, accuracy };
+
+  showSpeed(state.speed);
+
+  sendLocation(point, accuracy);
 
   if (state.active) {
-    addPoint(point);
+    walkPoint(point, accuracy);
   }
 }
 
 function geoError(error) {
-  initMap();
+  if (!state.map) initMap();
 
   if (error && error.code === 1) {
-    toast(
-      "Joylashuvga ruxsat berilmadi."
-    );
+    toast("Joylashuvga ruxsat berilmadi");
+
+    $("#locationModal")?.classList.add("active");
   } else {
-    toast(
-      "Joylashuv aniqlanmadi. GPSni tekshiring."
-    );
+    toast("Joylashuv aniqlanmadi — GPS'ni tekshiring");
   }
+}
+
+function startWatching() {
+  if (!navigator.geolocation) {
+    toast("Bu brauzerda joylashuv ishlamaydi");
+    return;
+  }
+
+  if (state.watchId !== null) return;
+
+  state.watchId = navigator.geolocation.watchPosition(onPosition, geoError, {
+    enableHighAccuracy: true,
+    maximumAge: 1000,
+    timeout: 20000
+  });
 }
 
 function requestLocation() {
   if (!navigator.geolocation) {
-    geoError({ code: 0 });
+    toast("Bu brauzerda joylashuv ishlamaydi");
     return;
   }
 
   navigator.geolocation.getCurrentPosition(
-    (position) => {
-      onPosition(position);
+    (pos) => {
+      $("#locationModal")?.classList.remove("active");
 
-      if ($("#locationModal")) {
-        $("#locationModal")
-          .classList.remove("active");
-      }
+      onPosition(pos);
+      startWatching();
 
-      toast(
-        "Joylashuv aniqlandi ✓"
-      );
+      toast("Joylashuv aniqlandi ✓");
     },
 
     geoError,
 
-    {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0
-    }
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
   );
 }
 
-/* =========================
-   YURISH
-========================= */
+// Ruxsat allaqachon berilgan bo'lsa — hech narsa so'ramaymiz
+async function ensureLocation() {
+  if (!navigator.geolocation) return;
 
-function addPoint(point) {
-  const previous =
-    state.points.at(-1);
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const status = await navigator.permissions.query({
+        name: "geolocation"
+      });
 
-  if (
-    previous &&
-    hav(previous, point) < 3
-  ) {
-    return;
+      if (status.state === "granted") {
+        startWatching();
+        return;
+      }
+    }
+  } catch {
+    /* permissions API yo'q */
   }
 
-  if (previous) {
-    state.distance += hav(
-      previous,
-      point
-    );
+  $("#locationModal")?.classList.add("active");
+}
+
+// ============================================================
+// YURISH
+// ============================================================
+
+function walkPoint(point, accuracy) {
+  // Aniqligi yomon nuqta hududni buzadi
+  if (accuracy > CONFIG.MAX_ACCURACY) return;
+
+  // ---- TEZLIK CHEKLOVI ----
+  if (state.speed > CONFIG.MAX_SPEED_KMH) {
+    state.maxSpeed = Math.max(state.maxSpeed, state.speed);
+    state.tooFast = true;
+
+    speedWarning(true, state.speed);
+
+    return; // transportda — nuqta yozilmaydi
   }
+
+  // ---- Tezlikdan qaytdi ----
+  if (state.tooFast) {
+    state.tooFast = false;
+
+    speedWarning(false, 0);
+
+    const last = state.points.at(-1);
+
+    if (last && hav(last, point) > CONFIG.RESET_JUMP) {
+      // Transportda uzoqqa ketib qolgan — yurish qaytadan
+      resetTrack();
+
+      toast("Tez harakat aniqlandi — hudud qaytadan boshlandi");
+    }
+  }
+
+  const previous = state.points.at(-1);
+
+  if (previous && hav(previous, point) < CONFIG.MIN_STEP) return;
+
+  if (previous) state.distance += hav(previous, point);
 
   state.points.push(point);
 
-  if (!state.line) {
-    state.line =
-      L.polyline(
-        state.points,
-        {
-          color: "#ef3340",
-          weight: 5,
-          opacity: 0.95,
-          lineJoin: "round"
-        }
-      ).addTo(state.map);
-
-  } else {
-    state.line.setLatLngs(
-      state.points
-    );
-  }
-
-  if (state.preview) {
-    state.preview.remove();
-  }
-
-  if (state.points.length > 2) {
-    state.preview =
-      L.polygon(
-        state.points,
-        {
-          color: "#ef3340",
-          weight: 1,
-          dashArray: "5 7",
-          fillColor: "#ef3340",
-          fillOpacity: 0.1
-        }
-      ).addTo(state.map);
-  }
-
+  drawTrack();
   updateStats();
 
-  /*
-    Boshlangan joyga qaytsa
-  */
-
+  // ---- Boshlang'ich nuqtaga qaytdi ----
   if (
     state.points.length > 8 &&
-    hav(
-      state.points[0],
-      point
-    ) < 18
+    hav(state.points[0], point) < CONFIG.CLOSE_RADIUS
   ) {
     finishWalk(true);
   }
 }
 
+function drawTrack() {
+  if (!state.line) {
+    state.line = L.polyline(state.points, {
+      color: state.color,
+      weight: 5,
+      opacity: 0.95,
+      lineJoin: "round"
+    }).addTo(state.map);
+  } else {
+    state.line.setLatLngs(state.points);
+  }
+
+  if (state.preview) state.preview.remove();
+
+  if (state.points.length > 2) {
+    state.preview = L.polygon(state.points, {
+      color: state.color,
+      weight: 1,
+      dashArray: "5 7",
+      fillColor: state.color,
+      fillOpacity: 0.12
+    }).addTo(state.map);
+  }
+}
+
+function resetTrack() {
+  state.points = [];
+  state.distance = 0;
+  state.started = Date.now();
+
+  if (state.line) state.line.remove();
+  if (state.preview) state.preview.remove();
+
+  state.line = null;
+  state.preview = null;
+}
+
 function updateStats() {
   if ($("#distance")) {
     $("#distance").innerHTML =
-      `${(
-        state.distance / 1000
-      ).toFixed(2)} <small>km</small>`;
+      (state.distance / 1000).toFixed(2) + ' <small>km</small>';
   }
 
-  const seconds =
-    state.active
-      ? Math.floor(
-          (Date.now() -
-            state.started) /
-            1000
-        )
-      : 0;
+  const seconds = state.active
+    ? Math.floor((Date.now() - state.started) / 1000)
+    : 0;
 
   if ($("#timer")) {
     $("#timer").textContent =
-      `${String(
-        Math.floor(seconds / 60)
-      ).padStart(2, "0")}:${String(
-        seconds % 60
-      ).padStart(2, "0")}`;
+      String(Math.floor(seconds / 60)).padStart(2, "0") +
+      ":" +
+      String(seconds % 60).padStart(2, "0");
   }
 
-  const speed =
-    seconds
-      ? (state.distance /
-          seconds) *
-        3.6
-      : 0;
+  // Yopilishga yaqin bo'lsa — taxminiy maydon
+  if (state.active && state.points.length > 2 && $("#areaStatus")) {
+    const area = Math.round(polygonArea(state.points));
 
-  if ($("#speed")) {
-    $("#speed").innerHTML =
-      `${speed.toFixed(
-        1
-      )} <small>km/soat</small>`;
+    $("#areaStatus").textContent = "Hozirgi aylana: ~" +
+      area.toLocaleString() + " m²";
   }
 }
 
 function startWalk() {
-  if (!state.map) {
-    initMap();
+  if (!state.name) {
+    $("#welcomeModal")?.classList.add("active");
+    return;
+  }
+
+  if (state.watchId === null) {
+    requestLocation();
   }
 
   state.active = true;
-  state.started = Date.now();
+  state.maxSpeed = 0;
+  state.tooFast = false;
 
-  state.points = [];
-  state.distance = 0;
+  resetTrack();
 
-  if (state.line) {
-    state.line.remove();
-  }
+  $("#startBtn")?.classList.add("running");
 
-  if (state.preview) {
-    state.preview.remove();
-  }
+  if ($("#startText")) $("#startText").textContent = "YURISHNI YAKUNLASH";
+  if ($("#hint")) $("#hint").textContent = "Boshlagan nuqtangizga qayting";
 
-  state.line = null;
-  state.preview = null;
+  clearInterval(state.timer);
+  state.timer = setInterval(updateStats, 1000);
 
-  $("#startBtn")?.classList.add(
-    "running"
-  );
+  toast("Yurish boshlandi — piyoda yuring!");
+}
 
-  if ($("#startText")) {
-    $("#startText").textContent =
-      "YURISHNI YAKUNLASH";
-  }
+async function finishWalk(closed) {
+  if (!state.active) return;
 
-  if ($("#hint")) {
-    $("#hint").textContent =
-      "Boshlagan nuqtangizga qayting";
-  }
+  state.active = false;
 
   clearInterval(state.timer);
 
-  state.timer =
-    setInterval(
-      updateStats,
-      1000
-    );
+  speedWarning(false, 0);
 
-  if (
-    navigator.geolocation
-  ) {
-    if (
-      state.watching !== null
-    ) {
-      navigator.geolocation.clearWatch(
-        state.watching
-      );
-    }
+  $("#startBtn")?.classList.remove("running");
 
-    state.watching =
-      navigator.geolocation.watchPosition(
-        onPosition,
-        geoError,
-        {
-          enableHighAccuracy: true,
-          maximumAge: 1000,
-          timeout: 15000
-        }
-      );
-  }
-
-  toast(
-    "Yurish boshlandi — xavfsiz yuring!"
-  );
-}
-
-/* =========================
-   HUDUDNI YAKUNLASH
-========================= */
-
-async function finishWalk(
-  closed = false
-) {
-  state.active = false;
-
-  clearInterval(
-    state.timer
-  );
-
-  if (
-    state.watching !== null
-  ) {
-    navigator.geolocation.clearWatch(
-      state.watching
-    );
-
-    state.watching = null;
-  }
-
-  $("#startBtn")?.classList.remove(
-    "running"
-  );
-
-  if ($("#startText")) {
-    $("#startText").textContent =
-      "YURISHNI BOSHLASH";
-  }
+  if ($("#startText")) $("#startText").textContent = "YURISHNI BOSHLASH";
 
   if ($("#hint")) {
-    $("#hint").textContent =
-      "Boshlagan joyingizga qaytib, hududni yoping";
+    $("#hint").textContent = "Boshlagan joyingizga qaytib, hududni yoping";
   }
 
-  if (
-    state.points.length < 3
-  ) {
-    toast(
-      "Hudud yaratish uchun ko'proq yuring"
-    );
+  const duration = Math.round((Date.now() - state.started) / 1000);
+
+  if (state.points.length < 4) {
+    toast("Hudud yaratish uchun ko'proq yuring");
+    updateMyCard();
     return;
   }
 
-  const gap = hav(
-    state.points[0],
-    state.points.at(-1)
-  );
+  const gap = hav(state.points[0], state.points.at(-1));
 
-  if (
-    !closed &&
-    gap > 35
-  ) {
-    toast(
-      "Hudud yopilmadi — boshlagan nuqtaga qayting"
-    );
+  if (!closed && gap > 40) {
+    toast("Hudud yopilmadi — boshlagan nuqtaga qayting");
+    updateMyCard();
     return;
   }
 
-  const area = Math.round(
-    polygonArea(
-      state.points
-    )
-  );
+  const avgSpeed = duration > 0 ? (state.distance / duration) * 3.6 : 0;
+
+  if (avgSpeed > CONFIG.MAX_AVG_SPEED_KMH) {
+    toast(
+      "O'rtacha tezlik " +
+        avgSpeed.toFixed(1) +
+        " km/soat — hudud faqat piyoda yurganda egallanadi"
+    );
+
+    resetTrack();
+    updateMyCard();
+    return;
+  }
+
+  const { ok, data } = await api("/api/territory", {
+    id: state.id,
+    name: state.name,
+    points: state.points,
+    duration,
+    distance: Math.round(state.distance),
+    maxSpeed: Math.round(state.maxSpeed * 10) / 10
+  });
+
+  if (!ok) {
+    toast(data.message || "Hudud saqlanmadi");
+
+    if (data.error === "too_fast") resetTrack();
+
+    updateMyCard();
+    return;
+  }
 
   if (state.preview) {
     state.preview.remove();
     state.preview = null;
   }
 
-  if ($("#areaStatus")) {
-    $("#areaStatus").textContent =
-      `Yangi hudud: +${area.toLocaleString()} m²`;
+  if (state.line) {
+    state.line.remove();
+    state.line = null;
   }
 
-  try {
-    const response =
-      await fetch(
-        "/api/territory",
-        {
-          method: "POST",
+  state.points = [];
 
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
+  if (Array.isArray(data.players)) renderWorld(data.players);
 
-          body: JSON.stringify({
-            id: state.userId,
-            name: state.name,
-            points: state.points,
-            area
-          })
-        }
-      );
+  const area = data.territory ? Number(data.territory.area || 0) : 0;
 
-    if (!response.ok) {
-      throw new Error(
-        "Territory API error"
-      );
-    }
-
-    const result =
-      await response.json();
-
-    /*
-      Serverdan keyingi
-      worldni darhol olamiz.
-    */
-
-    await fetchWorld();
+  if (data.captured && data.captured.length) {
+    const names = data.captured.map((c) => c.ownerName).join(", ");
 
     toast(
-      `${area.toLocaleString()} m² hudud saqlandi!`
+      "+" +
+        area.toLocaleString() +
+        " m² · " +
+        names +
+        " hududi bosib olindi!"
     );
-
-    /*
-      Yangi hududni xaritada
-      darhol ko'rsatish
-    */
-
-    if (
-      result.territory &&
-      Array.isArray(
-        result.territory.points
-      )
-    ) {
-      const color =
-        result.player?.color ||
-        "#ef3340";
-
-      const layer =
-        L.polygon(
-          result.territory.points,
-          {
-            color,
-            fillColor: color,
-            fillOpacity: 0.28,
-            weight: 3
-          }
-        ).addTo(state.map);
-
-      state.onlineLayers.push(
-        layer
-      );
-    }
-
-  } catch (error) {
-    console.log(
-      "Territory error:",
-      error
-    );
-
-    /*
-      Server ishlamasa ham
-      lokal xaritada ko'rsatamiz
-    */
-
-    L.polygon(
-      state.points,
-      {
-        color: "#ef3340",
-        fillColor: "#ef3340",
-        fillOpacity: 0.28,
-        weight: 3
-      }
-    ).addTo(state.map);
-
-    toast(
-      "Server bilan aloqa yo'q — hudud vaqtincha lokal ko'rinadi"
-    );
+  } else {
+    toast("+" + area.toLocaleString() + " m² hudud egallandi!");
   }
 }
 
-/* =========================
-   LEADERBOARD
-========================= */
+// ============================================================
+// REYTING
+// ============================================================
 
 function renderBoard() {
-  if (!$("#leaderRows")) {
+  if (!$("#leaderRows")) return;
+
+  const rows = state.players
+    .slice()
+    .sort((a, b) => Number(b.area || 0) - Number(a.area || 0));
+
+  if (!rows.length) {
+    $("#leaderRows").innerHTML =
+      '<div class="live-empty">Hozircha hech kim hudud egallamagan</div>';
+
     return;
   }
 
-  const rows = (
-    state.players.length
-      ? state.players
-      : [
-          {
-            name:
-              state.name || "Siz",
-            color: "#ef3340",
-            area:
-              Number(
-                localStorage.getItem(
-                  "izlaArea"
-                )
-              ) || 0
-          }
-        ]
-  ).sort(
-    (a, b) =>
-      Number(b.area || 0) -
-      Number(a.area || 0)
-  );
+  $("#leaderRows").innerHTML = rows
+    .map((player, index) => {
+      const isMe = String(player.id) === String(state.id);
 
-  $("#leaderRows").innerHTML =
-    rows
-      .map(
-        (player, index) => `
-        <div class="leader-row">
-          <b>${index + 1}</b>
-
-          <i style="
-            background:${
-              player.color ||
-              colors[
-                index %
-                  colors.length
-              ]
-            };
-          "></i>
-
-          <span>
-            ${esc(
-              player.name
-            )}
-          </span>
-
-          <strong>
-            ${Math.round(
-              Number(
-                player.area || 0
-              )
-            ).toLocaleString()}
-            m²
-          </strong>
-        </div>
-      `
-      )
-      .join("");
-}
-
-/* =========================
-   ISM / NIK
-========================= */
-
-function saveName(name) {
-  state.name =
-    String(name)
-      .trim()
-      .slice(0, 30);
-
-  localStorage.setItem(
-    "izlaName",
-    state.name
-  );
-
-  if ($("#nameInput")) {
-    $("#nameInput").value =
-      state.name;
-  }
-
-  if ($("#avatarLetter")) {
-    $("#avatarLetter").textContent =
-      state.name
-        ? state.name[0].toUpperCase()
-        : "?";
-  }
-}
-
-if ($("#continueBtn")) {
-  $("#continueBtn").onclick =
-    () => {
-      const name =
-        $("#nameInput")
-          ?.value
-          .trim();
-
-      if (!name) {
-        $("#nameError")?.classList.add(
-          "show"
-        );
-
-        $("#nameInput")?.focus();
-
-        return;
-      }
-
-      saveName(name);
-
-      $("#nameError")?.classList.remove(
-        "show"
+      return (
+        '<div class="leader-row"' +
+        (isMe ? ' style="font-weight:800"' : "") +
+        ">" +
+        "<b>" +
+        (index + 1) +
+        "</b>" +
+        '<i style="background:' +
+        esc(player.color) +
+        '"></i>' +
+        "<span>" +
+        esc(player.name) +
+        (isMe ? " (Siz)" : "") +
+        "</span>" +
+        "<strong>" +
+        Math.round(Number(player.area || 0)).toLocaleString() +
+        " m²</strong>" +
+        "</div>"
       );
-
-      $("#welcomeModal")?.classList.remove(
-        "active"
-      );
-
-      $("#locationModal")?.classList.add(
-        "active"
-      );
-
-      renderBoard();
-    };
+    })
+    .join("");
 }
 
-if ($("#nameInput")) {
-  $("#nameInput").onkeydown =
-    (event) => {
-      if (
-        event.key === "Enter"
-      ) {
-        $("#continueBtn")?.click();
-      }
-    };
-
-  $("#nameInput").oninput =
-    () => {
-      $("#nameError")?.classList.remove(
-        "show"
-      );
-    };
-}
-
-/* =========================
-   TUGMALAR
-========================= */
-
-if ($("#allowBtn")) {
-  $("#allowBtn").onclick =
-    requestLocation;
-}
-
-if ($("#startBtn")) {
-  $("#startBtn").onclick =
-    () => {
-      if (state.active) {
-        finishWalk();
-      } else {
-        startWalk();
-      }
-    };
-}
-
-if ($("#locateBtn")) {
-  $("#locateBtn").onclick =
-    () => {
-      if (
-        state.marker &&
-        state.map
-      ) {
-        state.map.flyTo(
-          state.marker.getLatLng(),
-          17
-        );
-      } else {
-        requestLocation();
-      }
-    };
-}
-
-if ($("#rankBtn")) {
-  $("#rankBtn").onclick =
-    () => {
-      $("#leaderboard")?.classList.toggle(
-        "open"
-      );
-    };
-}
-
-if ($("#closeBoard")) {
-  $("#closeBoard").onclick =
-    () => {
-      $("#leaderboard")?.classList.remove(
-        "open"
-      );
-    };
-}
-
-/* =========================
-   SAQLANGAN NIK
-========================= */
-
-const savedName =
-  localStorage.getItem(
-    "izlaName"
-  );
-
-if (savedName) {
-  saveName(savedName);
-}
-
-if ($("#totalArea")) {
-  $("#totalArea").textContent =
-    Math.round(
-      Number(
-        localStorage.getItem(
-          "izlaArea"
-        )
-      ) || 0
-    ).toLocaleString();
-}
-
-/* =========================
-   START
-========================= */
-
-document.addEventListener(
-  "DOMContentLoaded",
-  () => {
-    /*
-      Agar ism oldindan saqlangan
-      bo'lsa, server bilan
-      ishlashni boshlaymiz.
-    */
-
-    if (state.name) {
-      initMap();
-      fetchWorld();
-    }
-  }
-);
-// ===============================
+// ============================================================
 // JONLI ODAMLAR
-// ===============================
+// ============================================================
 
-const liveBtn = document.querySelector('#liveBtn');
-const livePanel = document.querySelector('#livePanel');
-const closeLive = document.querySelector('#closeLive');
-const livePlayers = document.querySelector('#livePlayers');
-
-let liveOpen = false;
-
-function showLivePlayers() {
-  if (!livePlayers) return;
-
+function onlinePlayers() {
   const now = Date.now();
 
-  const players = (state.players || []).filter((p) => {
-    if (!p.location) return false;
+  return state.players.filter(
+    (p) => p.location && now - Number(p.location.time || 0) < CONFIG.ONLINE_MS
+  );
+}
 
-    // Oxirgi 2 daqiqada joylashuvi yuborilgan odam
-    return now - Number(p.location.time || 0) < 120000;
-  });
+function renderLive() {
+  const list = onlinePlayers();
 
-  if (!players.length) {
-    livePlayers.innerHTML = `
-      <div class="live-empty">
-        Hozircha boshqa odamlar ko‘rinmadi
-      </div>
-    `;
+  const pill = $("#liveBtn")?.querySelector("span");
+
+  if (pill) {
+    pill.textContent = list.length ? "JONLI · " + list.length : "JONLI";
+  }
+
+  const box = $("#livePlayers");
+
+  if (!box || !state.liveOpen) return;
+
+  if (!list.length) {
+    box.innerHTML =
+      '<div class="live-empty">Hozircha boshqa odamlar ko‘rinmadi</div>';
+
     return;
   }
 
-  livePlayers.innerHTML = players
+  box.innerHTML = list
     .map((p) => {
-      const isMe = String(p.id) === String(state.userId);
+      const isMe = String(p.id) === String(state.id);
 
-      return `
-        <button
-          class="live-player"
-          data-player-id="${esc(String(p.id))}"
-          type="button"
-        >
-          <i style="background:${p.color || '#ef3340'}"></i>
-
-          <span class="live-player-info">
-            <strong>
-              ${esc(p.name || 'Nomaʼlum')}
-              ${isMe ? ' (Siz)' : ''}
-            </strong>
-            <small>
-              ${isMe ? 'Sizning joylashuvingiz' : 'Hozir onlayn'}
-            </small>
-          </span>
-
-          <b>›</b>
-        </button>
-      `;
+      return (
+        '<button class="live-player" type="button" data-player-id="' +
+        esc(p.id) +
+        '">' +
+        '<i style="background:' +
+        esc(p.color) +
+        '"></i>' +
+        '<span class="live-player-info">' +
+        "<strong>" +
+        esc(p.name) +
+        (isMe ? " (Siz)" : "") +
+        "</strong>" +
+        "<small>" +
+        Math.round(Number(p.area || 0)).toLocaleString() +
+        " m² · hozir onlayn</small>" +
+        "</span><b>›</b></button>"
+      );
     })
-    .join('');
+    .join("");
+}
 
-  document.querySelectorAll('.live-player').forEach((button) => {
-    button.addEventListener('click', () => {
-      const id = button.dataset.playerId;
+function bindLive() {
+  $("#liveBtn")?.addEventListener("click", () => {
+    state.liveOpen = !state.liveOpen;
 
-      const person = state.players.find(
-        (p) => String(p.id) === String(id)
-      );
+    $("#livePanel")?.classList.toggle("open", state.liveOpen);
 
-      if (!person || !person.location || !state.map) return;
+    renderLive();
+  });
 
-      state.map.flyTo(
-        [
-          Number(person.location.lat),
-          Number(person.location.lng)
-        ],
-        17,
-        {
-          duration: 1
-        }
-      );
+  $("#closeLive")?.addEventListener("click", () => {
+    state.liveOpen = false;
+    $("#livePanel")?.classList.remove("open");
+  });
 
-      livePanel.classList.remove('open');
-      liveOpen = false;
+  $("#livePlayers")?.addEventListener("click", (event) => {
+    const button = event.target.closest(".live-player");
 
-      toast(`${person.name} joylashuvi`);
-    });
+    if (!button) return;
+
+    const person = state.players.find(
+      (p) => String(p.id) === String(button.dataset.playerId)
+    );
+
+    if (!person || !person.location || !state.map) return;
+
+    state.map.flyTo(
+      [Number(person.location.lat), Number(person.location.lng)],
+      17,
+      { duration: 1 }
+    );
+
+    state.liveOpen = false;
+    $("#livePanel")?.classList.remove("open");
+
+    toast(person.name + " joylashuvi");
   });
 }
 
-function toggleLive() {
-  liveOpen = !liveOpen;
+// ============================================================
+// ISM — FAQAT BIR MARTA
+// ============================================================
 
-  if (liveOpen) {
-    livePanel.classList.add('open');
-    showLivePlayers();
-  } else {
-    livePanel.classList.remove('open');
+function showNameError(message) {
+  const box = $("#nameError");
+
+  if (!box) return;
+
+  box.textContent = message;
+  box.classList.add("show");
+}
+
+async function submitName() {
+  const button = $("#continueBtn");
+  const input = $("#nameInput");
+
+  const name = String(input?.value || "").trim();
+
+  if (name.length < 2) {
+    showNameError("Ism kamida 2 ta harf bo'lsin");
+    input?.focus();
+    return;
   }
-}
 
-if (liveBtn) {
-  liveBtn.addEventListener('click', toggleLive);
-}
+  if (button) button.disabled = true;
 
-if (closeLive) {
-  closeLive.addEventListener('click', () => {
-    liveOpen = false;
-    livePanel.classList.remove('open');
+  const { ok, status, data } = await api("/api/register", {
+    id: state.id,
+    name
   });
+
+  if (button) button.disabled = false;
+
+  if (!ok) {
+    showNameError(
+      status === 409
+        ? "Bu ism band. Boshqa ism tanlang."
+        : data.message || "Server bilan aloqa yo'q"
+    );
+
+    return;
+  }
+
+  const player = data.player || {};
+
+  state.name = player.name || name;
+
+  saveStored("zonexName", state.name);
+
+  applyColor(player.color);
+  setAvatar();
+
+  $("#nameError")?.classList.remove("show");
+  $("#welcomeModal")?.classList.remove("active");
+
+  startPolling();
+
+  ensureLocation();
 }
 
-// World yangilanganda JONLI ro'yxatini ham yangilash
-const oldRenderOnline = renderOnline;
-
-renderOnline = function (data) {
-  oldRenderOnline(data);
-
-  if (liveOpen) {
-    showLivePlayers();
+function setAvatar() {
+  if ($("#avatarLetter")) {
+    $("#avatarLetter").textContent = state.name
+      ? state.name[0].toUpperCase()
+      : "?";
   }
-};
+}
+
+// Eski akkauntni server bilan moslash (ism qayta so'ralmaydi)
+async function syncAccount() {
+  const { ok, status, data } = await api("/api/register", {
+    id: state.id,
+    name: state.name
+  });
+
+  if (ok && data.player) {
+    state.name = data.player.name || state.name;
+
+    saveStored("zonexName", state.name);
+
+    applyColor(data.player.color);
+    setAvatar();
+
+    return true;
+  }
+
+  // Ism band bo'lib qolgan bo'lsa — bir marta qayta so'raymiz
+  if (status === 409) {
+    showNameError("Bu ism band. Boshqa ism tanlang.");
+    $("#welcomeModal")?.classList.add("active");
+
+    return false;
+  }
+
+  return true; // server yotgan bo'lsa ham o'yin davom etadi
+}
+
+// ============================================================
+// TUGMALAR
+// ============================================================
+
+function bindButtons() {
+  $("#continueBtn")?.addEventListener("click", submitName);
+
+  $("#nameInput")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") submitName();
+  });
+
+  $("#nameInput")?.addEventListener("input", () => {
+    $("#nameError")?.classList.remove("show");
+  });
+
+  $("#allowBtn")?.addEventListener("click", requestLocation);
+
+  $("#startBtn")?.addEventListener("click", () => {
+    if (state.active) {
+      finishWalk(false);
+    } else {
+      startWalk();
+    }
+  });
+
+  $("#locateBtn")?.addEventListener("click", () => {
+    if (state.marker && state.map) {
+      state.map.flyTo(state.marker.getLatLng(), 17);
+    } else {
+      requestLocation();
+    }
+  });
+
+  $("#rankBtn")?.addEventListener("click", () => {
+    $("#leaderboard")?.classList.toggle("open");
+  });
+
+  $("#closeBoard")?.addEventListener("click", () => {
+    $("#leaderboard")?.classList.remove("open");
+  });
+
+  bindLive();
+}
+
+// ============================================================
+// BOSHLANISH
+// ============================================================
+
+async function boot() {
+  bindButtons();
+
+  initMap();
+
+  applyColor(state.color || colorFromId(state.id));
+  setAvatar();
+  updateMyCard();
+
+  if (!state.name) {
+    // Faqat birinchi kirishda
+    $("#welcomeModal")?.classList.add("active");
+    return;
+  }
+
+  // Ism bor — hech narsa so'ramaymiz
+  const okAccount = await syncAccount();
+
+  startPolling();
+
+  if (okAccount) ensureLocation();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
+}

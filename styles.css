@@ -153,3 +153,74 @@
   font-size: 13px;
   opacity: .6;
 }
+/* ===============================
+   TEZLIK OGOHLANTIRISHI
+   =============================== */
+
+.speed-warn {
+  position: fixed;
+  z-index: 1500;
+  left: 50%;
+  bottom: 300px;
+  width: min(340px, calc(100vw - 32px));
+  transform: translate(-50%, 12px);
+  opacity: 0;
+  pointer-events: none;
+
+  background: #b91c1c;
+  color: #fff;
+  border-radius: 14px;
+  padding: 11px 14px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  box-shadow: 0 12px 30px rgba(185,28,28,.35);
+
+  transition: opacity .25s ease, transform .25s ease;
+}
+
+.speed-warn.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ===============================
+   XARITADAGI ODAM
+   =============================== */
+
+.zonex-player-marker {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.zx-player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.zx-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.45);
+}
+
+.zx-name {
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.78);
+  color: #fff;
+  font-weight: 800;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.owner-label span {
+  font-size: 11px;
+}

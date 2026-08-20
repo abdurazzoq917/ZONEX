@@ -1,332 +1,549 @@
 // api/_store.js
 // ============================================================
-// IZLA - UMUMIY STORE
+// ZONEX — MA'LUMOTLAR OMBORI (STORE)
 // ============================================================
 //
-// Bu fayl:
-// 1. Playerlarni boshqaradi
-// 2. Locationni saqlaydi
-// 3. Yurgan masofani saqlaydi
-// 4. Hududlarni saqlaydi
-// 5. location.js va territory.js uchun umumiy API beradi
-// 6. Eski data.js bilan ham ishlaydi
+// Bitta manba (single source of truth).
 //
+// Saqlash joyi avtomatik tanlanadi:
+//
+//   1) Upstash / Vercel KV  — env o'zgaruvchilari bo'lsa
+//      (KV_REST_API_URL + KV_REST_API_TOKEN yoki
+//       UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN)
+//
+//   2) Fayl — lokal serverda world.json,
+//      Vercel'da /tmp/zonex-world.json
+//
+// MUHIM: Vercel'da fayl vaqtinchalik. Hududlar butunlay
+// yo'qolmasligi uchun KV (Upstash Redis) ulash kerak.
 // ============================================================
 
-const {
-  getPlayer,
-  updateLocation,
-  addDistance,
-  addTerritory,
-  getPlayers
-} = require("./data");
+const fs = require("fs");
+const path = require("path");
 
+const REDIS_URL =
+  process.env.KV_REST_API_URL ||
+  process.env.UPSTASH_REDIS_REST_URL ||
+  "";
+
+const REDIS_TOKEN =
+  process.env.KV_REST_API_TOKEN ||
+  process.env.UPSTASH_REDIS_REST_TOKEN ||
+  "";
+
+const USE_REDIS = Boolean(REDIS_URL && REDIS_TOKEN);
+
+const IDS_KEY = "zonex:ids";
+const PLAYER_KEY = (id) => "zonex:player:" + id;
+
+const FILE_PATH = process.env.VERCEL
+  ? path.join("/tmp", "zonex-world.json")
+  : path.join(__dirname, "..", "world.json");
 
 // ============================================================
-// WORLD
-// ============================================================
-//
-// location.js va territory.js:
-//     getWorld()
-//     setWorld()
-//
-// funksiyalaridan foydalanadi.
-//
-// Asosiy player ma'lumotlari data.js orqali olinadi.
+// O'YIN QOIDALARI
 // ============================================================
 
-const world = {
+const RULES = {
+  // Yurish tezligi chegarasi (km/soat).
+  // Bundan tez bo'lsa — mashina / velosiped / samokat deb hisoblanadi.
+  MAX_SPEED_KMH: 12,
 
-  get players() {
-    return getPlayers();
-  }
+  // Butun aylanish bo'yicha o'rtacha tezlik chegarasi (km/soat).
+  MAX_AVG_SPEED_KMH: 10,
 
+  // Eng kichik hudud (m2).
+  MIN_AREA: 50,
+
+  // Odam "onlayn" hisoblanadigan vaqt (ms).
+  ONLINE_MS: 120000,
+
+  // Hudud bosib olinishi uchun kerakli qamrov (0..1).
+  CAPTURE_RATIO: 0.55
 };
 
-
 // ============================================================
-// PLAYER TOPISH / YARATISH
-// ============================================================
-
-function player(id, name) {
-  return getPlayer(
-    String(id),
-    String(name || "Noma'lum")
-  );
-}
-
-
-// ============================================================
-// WORLD OLISH
-// ============================================================
-
-function getWorld() {
-  return world;
-}
-
-
-// ============================================================
-// WORLD SAQLASH
+// RANG — qurilma ID bo'yicha, har kimga har xil
 // ============================================================
 //
-// data.js alohida funksiyalar orqali ma'lumotlarni saqlaydi.
-//
-// Agar keyinchalik data.js database bilan ishlasa,
-// shu store avtomatik ravishda undan foydalanadi.
-//
+// Oltin burchak (137.508) ishlatiladi: ketma-ket kelgan
+// ID'lar ham bir-biridan uzoq rang oladi.
 // ============================================================
 
-async function setWorld(newWorld) {
+function hashId(text) {
+  let hash = 2166136261;
 
-  if (
-    !newWorld ||
-    typeof newWorld !== "object"
-  ) {
-    return false;
+  const value = String(text);
+
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
   }
 
+  return Math.abs(hash | 0);
+}
 
-  const players =
-    Array.isArray(
-      newWorld.players
-    )
-      ? newWorld.players
-      : [];
+function playerColor(id) {
+  const hash = hashId(id);
 
+  const hue = Math.round((hash * 137.508) % 360);
 
-  // ----------------------------------------------------------
-  // Har bir playerni data.js orqali yangilaymiz
-  // ----------------------------------------------------------
+  // Juda ochiq yoki juda xira bo'lib ketmasligi uchun tor oraliq
+  const saturation = 62 + (hash % 4) * 6;
+  const lightness = 42 + ((hash >> 3) % 3) * 5;
 
-  for (
-    const p of players
-  ) {
+  return "hsl(" + hue + " " + saturation + "% " + lightness + "%)";
+}
 
-    if (!p || !p.id) {
-      continue;
-    }
+// ============================================================
+// GEOMETRIYA
+// ============================================================
 
+function distanceMeters(a, b) {
+  const R = 6371000;
+  const rad = Math.PI / 180;
 
-    const id =
-      String(p.id);
+  const dLat = (Number(b[0]) - Number(a[0])) * rad;
+  const dLng = (Number(b[1]) - Number(a[1])) * rad;
 
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(Number(a[0]) * rad) *
+      Math.cos(Number(b[0]) * rad) *
+      Math.sin(dLng / 2) ** 2;
 
-    const name =
-      String(
-        p.name ||
-        "Noma'lum"
-      );
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(x)));
+}
 
+function polygonArea(points) {
+  if (!Array.isArray(points) || points.length < 3) return 0;
 
-    // --------------------------------------------------------
-    // Player mavjud bo'lmasa yaratamiz
-    // --------------------------------------------------------
+  const midLat =
+    ((points.reduce((sum, p) => sum + Number(p[0]), 0) / points.length) *
+      Math.PI) /
+    180;
 
-    const current =
-      getPlayer(
-        id,
-        name
-      );
+  const kx = 111320 * Math.cos(midLat);
+  const ky = 110540;
 
+  let sum = 0;
 
-    if (!current) {
-      continue;
-    }
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
 
-
-    // --------------------------------------------------------
-    // LOCATION
-    // --------------------------------------------------------
-
-    if (
-      p.location &&
-      Number.isFinite(
-        Number(
-          p.location.lat
-        )
-      ) &&
-      Number.isFinite(
-        Number(
-          p.location.lng
-        )
-      )
-    ) {
-
-      updateLocation(
-        id,
-        name,
-        Number(
-          p.location.lat
-        ),
-        Number(
-          p.location.lng
-        )
-      );
-
-    }
-
-
-    // --------------------------------------------------------
-    // MASOFA
-    // --------------------------------------------------------
-    //
-    // setWorld har safar totalDistance'ni qayta qo'shmasligi
-    // kerak.
-    //
-    // Shuning uchun distance bu yerda faqat mavjud bo'lmasa
-    // ishlatiladi.
-    // --------------------------------------------------------
-
-    if (
-      Number.isFinite(
-        Number(
-          p.totalDistance
-        )
-      ) &&
-      Number(
-        p.totalDistance
-      ) > 0
-    ) {
-
-      current.totalDistance =
-        Number(
-          p.totalDistance
-        );
-
-    }
-
-
-    // --------------------------------------------------------
-    // RANG
-    // --------------------------------------------------------
-
-    if (p.color) {
-      current.color =
-        String(
-          p.color
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // AREA
-    // --------------------------------------------------------
-
-    if (
-      Number.isFinite(
-        Number(
-          p.area
-        )
-      )
-    ) {
-
-      current.area =
-        Number(
-          p.area
-        );
-
-    }
-
-
-    // --------------------------------------------------------
-    // TERRITORIES
-    // --------------------------------------------------------
-
-    if (
-      Array.isArray(
-        p.territories
-      )
-    ) {
-
-      current.territories =
-        p.territories;
-
-    }
-
-
-    // --------------------------------------------------------
-    // VAQTLAR
-    // --------------------------------------------------------
-
-    if (
-      Number.isFinite(
-        Number(
-          p.createdAt
-        )
-      )
-    ) {
-
-      current.createdAt =
-        Number(
-          p.createdAt
-        );
-
-    }
-
-
-    if (
-      Number.isFinite(
-        Number(
-          p.updatedAt
-        )
-      )
-    ) {
-
-      current.updatedAt =
-        Number(
-          p.updatedAt
-        );
-
-    }
-
-
-    // --------------------------------------------------------
-    // ONLINE
-    // --------------------------------------------------------
-
-    if (
-      typeof p.online ===
-      "boolean"
-    ) {
-
-      current.online =
-        p.online;
-
-    }
-
+    sum +=
+      Number(a[1]) * kx * (Number(b[0]) * ky) -
+      Number(b[1]) * kx * (Number(a[0]) * ky);
   }
 
+  return Math.abs(sum / 2);
+}
+
+function perimeterMeters(points) {
+  if (!Array.isArray(points) || points.length < 2) return 0;
+
+  let total = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    total += distanceMeters(points[i - 1], points[i]);
+  }
+
+  return total;
+}
+
+function centroid(points) {
+  let lat = 0;
+  let lng = 0;
+
+  points.forEach((p) => {
+    lat += Number(p[0]);
+    lng += Number(p[1]);
+  });
+
+  return [lat / points.length, lng / points.length];
+}
+
+function pointInPolygon(point, polygon) {
+  if (!Array.isArray(point) || !Array.isArray(polygon)) return false;
+  if (polygon.length < 3) return false;
+
+  const x = Number(point[1]);
+  const y = Number(point[0]);
+
+  let inside = false;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = Number(polygon[i][1]);
+    const yi = Number(polygon[i][0]);
+    const xj = Number(polygon[j][1]);
+    const yj = Number(polygon[j][0]);
+
+    const intersect =
+      yi > y !== yj > y &&
+      x < ((xj - xi) * (y - yi)) / (yj - yi || Number.EPSILON) + xi;
+
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
+// Eski hududning qancha qismi yangi hudud ichida qolgani (0..1)
+function coverageRatio(target, polygon) {
+  if (!Array.isArray(target) || target.length < 3) return 0;
+
+  let inside = 0;
+
+  target.forEach((p) => {
+    if (pointInPolygon(p, polygon)) inside++;
+  });
+
+  const ratio = inside / target.length;
+
+  // Markazi ham ichida bo'lsa — bosib olingan deb hisoblaymiz
+  if (ratio > 0.3 && pointInPolygon(centroid(target), polygon)) {
+    return Math.max(ratio, RULES.CAPTURE_RATIO);
+  }
+
+  return ratio;
+}
+
+function validPoint(point) {
+  if (!Array.isArray(point) || point.length < 2) return false;
+
+  const lat = Number(point[0]);
+  const lng = Number(point[1]);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  if (lat < -90 || lat > 90) return false;
+  if (lng < -180 || lng > 180) return false;
 
   return true;
 }
 
+function cleanPoints(points) {
+  if (!Array.isArray(points)) return [];
+
+  return points
+    .filter(validPoint)
+    .slice(0, 3000)
+    .map((p) => [Number(p[0]), Number(p[1])]);
+}
 
 // ============================================================
-// EXPORT
+// PLAYER MODELI
 // ============================================================
+
+function normalizeName(name) {
+  return String(name || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 20);
+}
+
+function nameKey(name) {
+  return normalizeName(name).toLowerCase();
+}
+
+function createPlayer(id, name) {
+  const now = Date.now();
+
+  return {
+    id: String(id),
+    name: normalizeName(name) || "Noma'lum",
+    color: playerColor(id),
+    location: null,
+    area: 0,
+    territories: [],
+    totalDistance: 0,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function normalizePlayer(player, id) {
+  if (!player || typeof player !== "object") {
+    return createPlayer(id, "Noma'lum");
+  }
+
+  player.id = String(player.id || id);
+  player.name = normalizeName(player.name) || "Noma'lum";
+
+  // Rang har doim ID'dan hisoblanadi — hech kimda qizil qotib qolmaydi
+  player.color = playerColor(player.id);
+
+  if (!Array.isArray(player.territories)) {
+    player.territories = [];
+  }
+
+  player.territories = player.territories
+    .filter((t) => t && Array.isArray(t.points) && t.points.length >= 3)
+    .map((t) => ({
+      ...t,
+      ownerId: player.id,
+      ownerName: player.name,
+      color: player.color,
+      area: Number(t.area) || 0
+    }));
+
+  if (!Number.isFinite(Number(player.totalDistance))) {
+    player.totalDistance = 0;
+  }
+
+  if (
+    !player.location ||
+    !Number.isFinite(Number(player.location.lat)) ||
+    !Number.isFinite(Number(player.location.lng))
+  ) {
+    player.location = null;
+  } else {
+    const stamp =
+      Number(player.location.time || player.location.updatedAt) || 0;
+
+    player.location = {
+      lat: Number(player.location.lat),
+      lng: Number(player.location.lng),
+      accuracy: Number(player.location.accuracy) || null,
+      // Klient `time` maydonini o'qiydi — ikkalasini ham beramiz
+      time: stamp,
+      updatedAt: stamp
+    };
+  }
+
+  player.area = player.territories.reduce(
+    (sum, t) => sum + (Number(t.area) || 0),
+    0
+  );
+
+  player.online = Boolean(
+    player.location &&
+      Date.now() - Number(player.location.time || 0) < RULES.ONLINE_MS
+  );
+
+  if (!Number.isFinite(Number(player.createdAt))) {
+    player.createdAt = Date.now();
+  }
+
+  if (!Number.isFinite(Number(player.updatedAt))) {
+    player.updatedAt = Date.now();
+  }
+
+  return player;
+}
+
+function rebuildArea(player) {
+  player.area = player.territories.reduce(
+    (sum, t) => sum + (Number(t.area) || 0),
+    0
+  );
+
+  return player.area;
+}
+
+// ============================================================
+// REDIS (Upstash REST) DRAYVERI
+// ============================================================
+
+async function redisPipeline(commands) {
+  const response = await fetch(REDIS_URL + "/pipeline", {
+    method: "POST",
+
+    headers: {
+      Authorization: "Bearer " + REDIS_TOKEN,
+      "Content-Type": "application/json"
+    },
+
+    body: JSON.stringify(commands)
+  });
+
+  if (!response.ok) {
+    throw new Error("Redis xatosi: " + response.status);
+  }
+
+  const data = await response.json();
+
+  return (Array.isArray(data) ? data : [data]).map((row) => row.result);
+}
+
+async function redisReadAll() {
+  const [ids] = await redisPipeline([["SMEMBERS", IDS_KEY]]);
+
+  if (!Array.isArray(ids) || !ids.length) return {};
+
+  const [rows] = await redisPipeline([
+    ["MGET"].concat(ids.map((id) => PLAYER_KEY(id)))
+  ]);
+
+  const players = {};
+
+  ids.forEach((id, index) => {
+    const raw = rows && rows[index];
+
+    if (!raw) return;
+
+    try {
+      const player = typeof raw === "string" ? JSON.parse(raw) : raw;
+
+      if (player && player.id) {
+        players[String(player.id)] = player;
+      }
+    } catch {
+      /* buzilgan yozuvni tashlab ketamiz */
+    }
+  });
+
+  return players;
+}
+
+async function redisWrite(players) {
+  const commands = [];
+
+  players.forEach((player) => {
+    commands.push(["SET", PLAYER_KEY(player.id), JSON.stringify(player)]);
+    commands.push(["SADD", IDS_KEY, String(player.id)]);
+  });
+
+  if (!commands.length) return;
+
+  await redisPipeline(commands);
+}
+
+// ============================================================
+// FAYL DRAYVERI
+// ============================================================
+
+function fileReadAll() {
+  try {
+    if (!fs.existsSync(FILE_PATH)) return {};
+
+    const raw = JSON.parse(fs.readFileSync(FILE_PATH, "utf8") || "{}");
+
+    if (!raw) return {};
+
+    // Eski format: { players: [ ... ] }
+    if (Array.isArray(raw.players)) {
+      const players = {};
+
+      raw.players.forEach((p) => {
+        if (p && p.id) players[String(p.id)] = p;
+      });
+
+      return players;
+    }
+
+    if (raw.players && typeof raw.players === "object") {
+      return raw.players;
+    }
+
+    return {};
+  } catch (error) {
+    console.error("world faylini o'qib bo'lmadi:", error.message);
+    return {};
+  }
+}
+
+function fileWriteAll(players) {
+  try {
+    fs.writeFileSync(
+      FILE_PATH,
+      JSON.stringify({ players: Object.values(players) }, null, 2)
+    );
+  } catch (error) {
+    console.error("world faylini saqlab bo'lmadi:", error.message);
+  }
+}
+
+// ============================================================
+// UMUMIY API
+// ============================================================
+
+async function readPlayers() {
+  const players = USE_REDIS ? await redisReadAll() : fileReadAll();
+
+  Object.keys(players).forEach((id) => {
+    players[id] = normalizePlayer(players[id], id);
+  });
+
+  return players;
+}
+
+// Faqat o'zgargan o'yinchilarni yozamiz — boshqalarnikini o'chirmaydi
+async function writePlayers(changed) {
+  const list = Array.isArray(changed) ? changed : [changed];
+
+  const clean = list.filter(Boolean);
+
+  if (!clean.length) return;
+
+  clean.forEach((player) => {
+    player.updatedAt = Date.now();
+  });
+
+  if (USE_REDIS) {
+    await redisWrite(clean);
+    return;
+  }
+
+  const all = fileReadAll();
+
+  clean.forEach((player) => {
+    all[String(player.id)] = player;
+  });
+
+  fileWriteAll(all);
+}
+
+async function getWorld() {
+  const players = await readPlayers();
+
+  return {
+    players: Object.values(players).sort(
+      (a, b) => Number(b.area || 0) - Number(a.area || 0)
+    ),
+    storage: USE_REDIS ? "kv" : "file",
+    time: Date.now()
+  };
+}
+
+// Ism band emasmi? (o'zinikidan boshqa odamda bormi)
+function isNameTaken(players, name, ownId) {
+  const key = nameKey(name);
+
+  if (!key) return false;
+
+  return Object.values(players).some(
+    (player) =>
+      String(player.id) !== String(ownId) && nameKey(player.name) === key
+  );
+}
 
 module.exports = {
+  RULES,
 
-  // World
-  world,
-
+  // saqlash
+  readPlayers,
+  writePlayers,
   getWorld,
-  setWorld,
 
-  // Player
-  player,
-  getPlayer,
+  // model
+  createPlayer,
+  normalizePlayer,
+  rebuildArea,
+  normalizeName,
+  nameKey,
+  isNameTaken,
+  playerColor,
 
-  // Location
-  updateLocation,
+  // geometriya
+  distanceMeters,
+  perimeterMeters,
+  polygonArea,
+  pointInPolygon,
+  coverageRatio,
+  centroid,
+  cleanPoints,
+  validPoint,
 
-  // Distance
-  addDistance,
-
-  // Territory
-  addTerritory,
-
-  // Barcha playerlar
-  getPlayers
-
+  USE_REDIS
 };

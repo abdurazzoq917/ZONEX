@@ -1,7 +1,36 @@
-const { world } = require('./_store');
+// api/world.js
+// ============================================================
+// GET /api/world
+//
+// Barcha o'yinchilar, ularning joylashuvi va hududlari.
+// ============================================================
 
-module.exports = function handler(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'method not allowed' });
-  res.setHeader('Cache-Control', 'no-store');
-  return res.status(200).json(world);
+const { json, preflight } = require("./_http");
+const { getWorld, RULES } = require("./_store");
+
+module.exports = async function handler(req, res) {
+  if (preflight(req, res)) return;
+
+  if (req.method !== "GET") {
+    return json(res, 405, { error: "Faqat GET so'rovi" });
+  }
+
+  try {
+    const world = await getWorld();
+
+    return json(res, 200, {
+      ok: true,
+      players: world.players,
+      storage: world.storage,
+      rules: RULES,
+      time: world.time
+    });
+  } catch (error) {
+    console.error("WORLD API XATOSI:", error);
+
+    return json(res, 500, {
+      error: "Serverda xatolik",
+      message: error && error.message
+    });
+  }
 };
