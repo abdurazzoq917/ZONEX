@@ -1,0 +1,8 @@
+# Sirlar — hech qachon GitHub'ga tushmasin
+.env
+.env.local
+.env.*.local
+
+node_modules/
+.vercel/
+npm-debug.log*

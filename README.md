@@ -39,18 +39,37 @@ Qoidalarni `api/_store.js` faylidagi `RULES` obyektidan o'zgartirish mumkin.
 | Vercel + Upstash/KV | Redis — doimiy |
 
 Vercel'da `/tmp` har safar tozalanib ketishi mumkin. Hududlar butunlay
-saqlanib turishi uchun bepul **Upstash Redis** ulang:
+saqlanib turishi uchun bepul **Upstash Redis** ulang.
 
-1. Vercel loyihasi → Storage → Upstash Redis (yoki upstash.com).
-2. Project Settings → Environment Variables ichida quyidagilar bo'lsin
-   (integratsiya odatda o'zi qo'shadi):
-   - `KV_REST_API_URL`
-   - `KV_REST_API_TOKEN`
-3. Qayta deploy qiling. Boshqa hech narsa o'zgartirish shart emas —
-   `api/_store.js` ularni o'zi topib oladi.
+### Vercel orqali (eng oson)
 
-`/api/world` javobidagi `"storage"` maydoni qaysi rejim ishlayotganini
-ko'rsatadi: `kv` yoki `file`.
+1. [vercel.com](https://vercel.com) → **ZONEX** loyihasi → yuqoridagi
+   **Storage** bo'limi.
+2. **Create Database** → **Upstash for Redis** → **Continue**.
+3. Nom bering (masalan `zonex-db`), region **eu-central-1** yoki eng
+   yaqinini tanlang → **Create**.
+4. Ochilgan oynada **Connect Project** → ZONEX → **Connect**.
+   Vercel `KV_REST_API_URL` va `KV_REST_API_TOKEN` ni o'zi qo'shadi.
+5. **Deployments** → oxirgisi → `...` → **Redeploy**.
+
+Kodda hech narsa o'zgartirish shart emas — `api/_store.js` bu
+o'zgaruvchilarni o'zi topib oladi.
+
+### Tekshirish
+
+Sayt tomonidan: `sayt-manzili/api/world` ni oching va `"storage"`
+maydoniga qarang — `"kv"` bo'lsa ulangan, `"file"` bo'lsa hali yo'q.
+
+Kompyuterdan:
+
+```powershell
+npm run kv
+```
+
+Bu buyruq bazaga yozib, o'qib, o'chirib ko'radi va natijani aytadi.
+Lokalda sinash uchun `.env.example` faylini `.env` nomi bilan nusxalab,
+Upstash sahifasidagi **REST API** bo'limidan olingan qiymatlarni qo'ying.
+`.env` GitHub'ga tushmaydi.
 
 ## API
 
@@ -71,3 +90,5 @@ ko'rsatadi: `kv` yoki `file`.
 | `api/_store.js` | Ma'lumotlar ombori, ranglar, geometriya, qoidalar |
 | `api/_http.js` | CORS va JSON yordamchilari |
 | `local-server.js` | Lokal server (`api/` fayllarining aynan o'zini ishlatadi) |
+| `api/_env.js` | Lokalda `.env` faylini o'qiydi |
+| `scripts/kv-check.js` | `npm run kv` — bazani tekshirish |

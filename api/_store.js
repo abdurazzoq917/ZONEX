@@ -18,6 +18,9 @@
 // yo'qolmasligi uchun KV (Upstash Redis) ulash kerak.
 // ============================================================
 
+// Lokalda .env faylini o'qiydi (Vercel'da hech narsa qilmaydi)
+require("./_env");
+
 const fs = require("fs");
 const path = require("path");
 

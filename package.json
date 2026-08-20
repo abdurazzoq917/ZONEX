@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "start": "node local-server.js",
-    "dev": "node local-server.js"
+    "dev": "node local-server.js",
+    "kv": "node scripts/kv-check.js"
   },
   "engines": {
     "node": ">=18"
