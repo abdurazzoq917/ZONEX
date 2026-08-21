@@ -49,11 +49,11 @@ const FILE_PATH = process.env.VERCEL
 
 const RULES = {
   // Yurish tezligi chegarasi (km/soat).
-  // Bundan tez bo'lsa — mashina / velosiped / samokat deb hisoblanadi.
-  MAX_SPEED_KMH: 12,
+  // Bundan tez bo'lsa — transport deb hisoblanadi.
+  MAX_SPEED_KMH: 23,
 
   // Butun aylanish bo'yicha o'rtacha tezlik chegarasi (km/soat).
-  MAX_AVG_SPEED_KMH: 10,
+  MAX_AVG_SPEED_KMH: 23,
 
   // Eng kichik hudud (m2).
   MIN_AREA: 50,
@@ -70,8 +70,46 @@ const RULES = {
 
   // Username uzunligi
   NAME_MIN: 3,
-  NAME_MAX: 16
+  NAME_MAX: 16,
+
+  // Profil rasmi eng ko'pi bilan shuncha belgi (base64 bilan).
+  // ~256x256 JPEG odatda 40 000 belgidan kam bo'ladi.
+  AVATAR_MAX: 260000,
+
+  // Bitta suhbatda saqlanadigan xabarlar soni
+  CHAT_MAX: 300,
+
+  // Bitta xabarning uzunligi
+  MESSAGE_MAX: 500,
+
+  // Ban muddatlari (kun). 0 — bandan chiqarish, -1 — umrbod.
+  BAN_DAYS: [3, 9, 15, -1],
+
+  // 18+ rasm aniqlanganda beriladigan ban (kun)
+  NSFW_BAN_DAYS: 3
 };
+
+// ============================================================
+// ADMIN
+// ============================================================
+//
+// Admin username bo'yicha aniqlanadi. Uni .env dagi
+// ADMIN_USERNAME orqali o'zgartirsa bo'ladi.
+//
+// ADMIN_KEY berilgan bo'lsa — admin harakatlari uchun o'sha
+// maxfiy so'z ham talab qilinadi (id'ni soxtalashtirishga
+// qarshi).
+// ============================================================
+
+const ADMIN_USERNAME = String(
+  process.env.ADMIN_USERNAME || "abdumalikov"
+)
+  .trim()
+  .toLowerCase();
+
+const ADMIN_KEY = String(process.env.ADMIN_KEY || "");
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ============================================================
 // RANG — qurilma ID bo'yicha, har kimga har xil
@@ -387,17 +425,113 @@ function nameKey(name) {
   return normalizeName(name).toLowerCase();
 }
 
+// ============================================================
+// ADMIN / BAN / DO'STLIK YORDAMCHILARI
+// ============================================================
+
+function isAdminName(name) {
+  return nameKey(name) === ADMIN_USERNAME;
+}
+
+// Admin harakatiga ruxsat bormi?
+//
+// ADMIN_KEY qo'yilgan bo'lsa — maxfiy so'z ham to'g'ri bo'lishi kerak.
+function adminAllowed(player, key) {
+  if (!player || !isAdminName(player.name)) return false;
+
+  if (!ADMIN_KEY) return true;
+
+  return String(key || "") === ADMIN_KEY;
+}
+
+function isBanned(player) {
+  if (!player) return false;
+
+  const until = Number(player.banUntil || 0);
+
+  if (until === -1) return true;
+
+  return until > Date.now();
+}
+
+// Ban haqida qisqa ma'lumot (klient shuni ko'rsatadi)
+function banInfo(player) {
+  if (!isBanned(player)) return null;
+
+  const until = Number(player.banUntil || 0);
+
+  return {
+    until,
+    forever: until === -1,
+    reason: String(player.banReason || ""),
+    at: Number(player.banAt || 0)
+  };
+}
+
+// days: -1 umrbod, 0 bandan chiqarish
+function applyBan(player, days, reason) {
+  const count = Number(days);
+
+  if (count === 0) {
+    player.banUntil = 0;
+    player.banReason = "";
+    player.banAt = 0;
+
+    return player;
+  }
+
+  player.banUntil = count === -1 ? -1 : Date.now() + count * DAY_MS;
+  player.banReason = String(reason || "").slice(0, 120);
+  player.banAt = Date.now();
+
+  return player;
+}
+
+function idList(value) {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set();
+
+  value.forEach((item) => {
+    const id = String(item || "").trim();
+
+    if (id) seen.add(id);
+  });
+
+  return Array.from(seen).slice(0, 500);
+}
+
 function createPlayer(id, name) {
   const now = Date.now();
 
+  const clean =
+    normalizeName(name) || "player_" + hashId(id).toString(36).slice(0, 5);
+
   return {
     id: String(id),
-    name: normalizeName(name) || "player_" + hashId(id).toString(36).slice(0, 5),
+    name: clean,
     color: playerColor(id),
     location: null,
     area: 0,
     territories: [],
     totalDistance: 0,
+
+    // profil
+    avatar: "",
+    avatarAt: 0,
+
+    // moderatsiya
+    role: isAdminName(clean) ? "admin" : "user",
+    banUntil: 0,
+    banReason: "",
+    banAt: 0,
+    nsfwHits: 0,
+
+    // do'stlik
+    friends: [],
+    incoming: [],
+    outgoing: [],
+
     createdAt: now,
     updatedAt: now
   };
@@ -465,6 +599,40 @@ function normalizePlayer(player, id) {
       Date.now() - Number(player.location.time || 0) < RULES.ONLINE_MS
   );
 
+  // ---- profil rasmi ----
+  player.avatar =
+    typeof player.avatar === "string" &&
+    player.avatar.startsWith("data:image/") &&
+    player.avatar.length <= RULES.AVATAR_MAX
+      ? player.avatar
+      : "";
+
+  player.avatarAt = Number(player.avatarAt) || 0;
+
+  if (!player.avatar) player.avatarAt = 0;
+
+  // ---- moderatsiya ----
+  player.role = isAdminName(player.name) ? "admin" : "user";
+
+  const until = Number(player.banUntil);
+
+  player.banUntil = until === -1 || until > 0 ? until : 0;
+
+  // Muddati o'tgan ban o'zi ochiladi
+  if (player.banUntil > 0 && player.banUntil <= Date.now()) {
+    player.banUntil = 0;
+    player.banReason = "";
+  }
+
+  player.banReason = String(player.banReason || "").slice(0, 120);
+  player.banAt = Number(player.banAt) || 0;
+  player.nsfwHits = Number(player.nsfwHits) || 0;
+
+  // ---- do'stlik ----
+  player.friends = idList(player.friends);
+  player.incoming = idList(player.incoming);
+  player.outgoing = idList(player.outgoing);
+
   if (!Number.isFinite(Number(player.createdAt))) {
     player.createdAt = Date.now();
   }
@@ -474,6 +642,75 @@ function normalizePlayer(player, id) {
   }
 
   return player;
+}
+
+// ============================================================
+// OCHIQ (PUBLIC) KO'RINISH
+// ============================================================
+//
+// Rasm ma'lumoti juda katta — har 3 sekundda hammaga
+// yuborilmaydi. Uning o'rniga faqat `avatarAt` (versiya)
+// beriladi, rasmni klient /api/avatar dan bir marta oladi.
+//
+// So'rovlar ro'yxati faqat o'ziga ko'rinadi.
+// ============================================================
+
+function publicPlayer(player, viewerId) {
+  const isSelf = viewerId && String(player.id) === String(viewerId);
+
+  const out = {
+    id: player.id,
+    name: player.name,
+    color: player.color,
+    location: player.location,
+    area: player.area,
+    territories: player.territories,
+    totalDistance: player.totalDistance,
+
+    avatarAt: player.avatarAt,
+    hasAvatar: Boolean(player.avatar),
+
+    role: player.role,
+    ban: banInfo(player),
+
+    friends: player.friends,
+
+    online: player.online,
+    createdAt: player.createdAt,
+    updatedAt: player.updatedAt
+  };
+
+  if (isSelf) {
+    out.incoming = player.incoming;
+    out.outgoing = player.outgoing;
+    out.nsfwHits = player.nsfwHits;
+  } else {
+    // Boshqalar uchun: menga so'rov yuborganmi / yubordimmi —
+    // buni klient o'z yozuvidan biladi
+    out.incoming = [];
+    out.outgoing = [];
+  }
+
+  return out;
+}
+
+function publicList(players, viewerId) {
+  const list = Array.isArray(players) ? players : Object.values(players);
+
+  const now = Date.now();
+
+  return list
+    .map((player) => {
+      const copy = publicPlayer(player, viewerId);
+
+      copy.online = Boolean(
+        player.location &&
+          now - Number(player.location.time || 0) < RULES.ONLINE_MS
+      );
+
+      return copy;
+    })
+    .sort((a, b) => Number(b.area || 0) - Number(a.area || 0));
 }
 
 function rebuildArea(player) {
@@ -557,45 +794,53 @@ async function redisWrite(players) {
 // FAYL DRAYVERI
 // ============================================================
 
-function fileReadAll() {
+// Butun faylni o'qiymiz: { players: [...], chats: { ... } }
+function fileReadRaw() {
   try {
     if (!fs.existsSync(FILE_PATH)) return {};
 
-    const raw = JSON.parse(fs.readFileSync(FILE_PATH, "utf8") || "{}");
-
-    if (!raw) return {};
-
-    // Eski format: { players: [ ... ] }
-    if (Array.isArray(raw.players)) {
-      const players = {};
-
-      raw.players.forEach((p) => {
-        if (p && p.id) players[String(p.id)] = p;
-      });
-
-      return players;
-    }
-
-    if (raw.players && typeof raw.players === "object") {
-      return raw.players;
-    }
-
-    return {};
+    return JSON.parse(fs.readFileSync(FILE_PATH, "utf8") || "{}") || {};
   } catch (error) {
     console.error("world faylini o'qib bo'lmadi:", error.message);
     return {};
   }
 }
 
-function fileWriteAll(players) {
+function fileWriteRaw(data) {
   try {
-    fs.writeFileSync(
-      FILE_PATH,
-      JSON.stringify({ players: Object.values(players) }, null, 2)
-    );
+    fs.writeFileSync(FILE_PATH, JSON.stringify(data, null, 2));
   } catch (error) {
     console.error("world faylini saqlab bo'lmadi:", error.message);
   }
+}
+
+function fileReadAll() {
+  const raw = fileReadRaw();
+
+  // Eski format: { players: [ ... ] }
+  if (Array.isArray(raw.players)) {
+    const players = {};
+
+    raw.players.forEach((p) => {
+      if (p && p.id) players[String(p.id)] = p;
+    });
+
+    return players;
+  }
+
+  if (raw.players && typeof raw.players === "object") {
+    return raw.players;
+  }
+
+  return {};
+}
+
+function fileWriteAll(players) {
+  const raw = fileReadRaw();
+
+  raw.players = Object.values(players);
+
+  fileWriteRaw(raw);
 }
 
 // ============================================================
@@ -638,16 +883,79 @@ async function writePlayers(changed) {
   fileWriteAll(all);
 }
 
-async function getWorld() {
+async function getWorld(viewerId) {
   const players = await readPlayers();
 
   return {
-    players: Object.values(players).sort(
-      (a, b) => Number(b.area || 0) - Number(a.area || 0)
-    ),
+    players: publicList(players, viewerId),
     storage: USE_REDIS ? "kv" : "file",
     time: Date.now()
   };
+}
+
+// ============================================================
+// SUHBAT (CHAT)
+// ============================================================
+//
+// Xabarlar o'yinchilardan alohida saqlanadi, chunki ular
+// tez o'sadi va har bir so'rovda kerak emas.
+// ============================================================
+
+function chatKey(a, b) {
+  return [String(a), String(b)].sort().join("|");
+}
+
+function cleanMessage(text) {
+  return String(text == null ? "" : text)
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, RULES.MESSAGE_MAX);
+}
+
+async function readChat(a, b) {
+  const key = chatKey(a, b);
+
+  if (USE_REDIS) {
+    const [raw] = await redisPipeline([["GET", "zonex:chat:" + key]]);
+
+    if (!raw) return [];
+
+    try {
+      const list = typeof raw === "string" ? JSON.parse(raw) : raw;
+
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  }
+
+  const file = fileReadRaw();
+
+  const list = file.chats && file.chats[key];
+
+  return Array.isArray(list) ? list : [];
+}
+
+async function appendMessage(a, b, message) {
+  const key = chatKey(a, b);
+
+  const list = (await readChat(a, b)).concat([message]).slice(-RULES.CHAT_MAX);
+
+  if (USE_REDIS) {
+    await redisPipeline([["SET", "zonex:chat:" + key, JSON.stringify(list)]]);
+
+    return list;
+  }
+
+  const file = fileReadRaw();
+
+  if (!file.chats || typeof file.chats !== "object") file.chats = {};
+
+  file.chats[key] = list;
+
+  fileWriteRaw(file);
+
+  return list;
 }
 
 // Ism band emasmi? (o'zinikidan boshqa odamda bormi)
@@ -664,21 +972,38 @@ function isNameTaken(players, name, ownId) {
 
 module.exports = {
   RULES,
+  ADMIN_USERNAME,
 
   // saqlash
   readPlayers,
   writePlayers,
   getWorld,
 
+  // suhbat
+  readChat,
+  appendMessage,
+  cleanMessage,
+  chatKey,
+
   // model
   createPlayer,
   normalizePlayer,
+  publicPlayer,
+  publicList,
   rebuildArea,
   normalizeName,
   usernameError,
   nameKey,
   isNameTaken,
   playerColor,
+
+  // moderatsiya / do'stlik
+  isAdminName,
+  adminAllowed,
+  isBanned,
+  banInfo,
+  applyBan,
+  idList,
 
   // geometriya
   distanceMeters,

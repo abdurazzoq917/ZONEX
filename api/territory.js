@@ -24,6 +24,10 @@ const {
   distanceMeters,
   coverageRatio,
   overlapArea,
+  publicPlayer,
+  publicList,
+  isBanned,
+  banInfo,
   RULES
 } = require("./_store");
 
@@ -73,10 +77,10 @@ module.exports = async function handler(req, res) {
 
     const duration = Number(body.duration); // sekund
 
-    if (!Number.isFinite(duration) || duration < 20) {
+    if (!Number.isFinite(duration) || duration < 8) {
       return json(res, 400, {
         error: "too_fast",
-        message: "Hudud juda tez yopildi — piyoda yurib ko'ring"
+        message: "Hudud juda tez yopildi — sekinroq yuring"
       });
     }
 
@@ -95,7 +99,7 @@ module.exports = async function handler(req, res) {
         message:
           "Tezligingiz " +
           (Math.round(avgSpeed * 10) / 10) +
-          " km/soat. Hudud faqat piyoda yurganda egallanadi."
+          " km/soat. Chegara — " + RULES.MAX_AVG_SPEED_KMH + " km/soat."
       });
     }
 
@@ -148,6 +152,18 @@ module.exports = async function handler(req, res) {
 
       player = createPlayer(id, name);
       players[id] = player;
+    }
+
+    // ---------------------------------------------------------
+    // BAN — banlangan odam hudud egallay olmaydi
+    // ---------------------------------------------------------
+
+    if (isBanned(player)) {
+      return json(res, 403, {
+        error: "banned",
+        message: "Siz banlangansiz — hudud egallab bo'lmaydi",
+        ban: banInfo(player)
+      });
     }
 
     // ---------------------------------------------------------
@@ -272,6 +288,15 @@ module.exports = async function handler(req, res) {
       color: player.color,
       points,
       area,
+
+      // Shu bitta halqa uchun yurilgan yo'l (metr).
+      // Profilda "bitta kesishishda qancha km yurgan" shundan chiqadi.
+      distance: Math.round(
+        Number.isFinite(Number(body.distance)) && Number(body.distance) > 0
+          ? Number(body.distance)
+          : walked
+      ),
+
       duration: Math.round(duration),
       speed: Math.round(avgSpeed * 10) / 10,
       capturedCount: captured.length,
@@ -288,13 +313,6 @@ module.exports = async function handler(req, res) {
 
     const now = Date.now();
 
-    const list = Object.values(players).map((p) => ({
-      ...p,
-      online: Boolean(
-        p.location && now - Number(p.location.time || 0) < RULES.ONLINE_MS
-      )
-    }));
-
     return json(res, 200, {
       ok: true,
 
@@ -302,11 +320,13 @@ module.exports = async function handler(req, res) {
         ? captured.length + " ta begona hudud bosib olindi!"
         : "Yangi hudud egallandi!",
 
-      player,
+      player: publicPlayer(player, id),
       territory,
       captured,
 
-      players: list.sort((a, b) => Number(b.area || 0) - Number(a.area || 0))
+      players: publicList(players, id),
+
+      time: now
     });
   } catch (error) {
     console.error("TERRITORY API XATOSI:", error);

@@ -252,3 +252,304 @@
   color: #d4a017;
   font-weight: 900;
 }
+
+/* ===============================
+   XARITADAGI ODAM — BOSILADIGAN
+   =============================== */
+
+.zonex-player-marker {
+  cursor: pointer;
+}
+
+.zx-player {
+  /* Odamning ustiga bosib profilini ochish uchun */
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.owner-label {
+  pointer-events: none;
+}
+
+/* ===============================
+   REYTING — 1, 2, 3 O'RIN EFFEKTI
+   =============================== */
+
+#leaderRows {
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.leader-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 8px;
+  border: 0;
+  border-bottom: 1px solid #eee;
+  border-radius: 11px;
+  background: transparent;
+  font-size: 10px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.leader-row:hover {
+  background: rgba(0, 0, 0, .04);
+}
+
+.leader-row .rank {
+  width: 18px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
+
+.leader-row.rank-1 .rank,
+.leader-row.rank-2 .rank,
+.leader-row.rank-3 .rank {
+  font-size: 14px;
+}
+
+/* 1-o'rin — oltin, yaltiraydi */
+.leader-row.rank-1 {
+  background: linear-gradient(100deg, #fff5cf, #ffe9a3 45%, #fff9e3);
+  border-bottom-color: #f0d47a;
+  box-shadow: 0 4px 14px rgba(212, 160, 23, .28);
+  font-weight: 900;
+}
+
+.leader-row.rank-1:after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  left: -60%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, .85),
+    transparent
+  );
+  animation: shine 2.6s ease-in-out infinite;
+}
+
+.leader-row.rank-1 strong {
+  color: #a4740b;
+}
+
+/* 2-o'rin — kumush */
+.leader-row.rank-2 {
+  background: linear-gradient(100deg, #f6f7fa, #e6e9ef 50%, #f8f9fc);
+  border-bottom-color: #d6dae2;
+  font-weight: 800;
+}
+
+.leader-row.rank-2 strong {
+  color: #5d6472;
+}
+
+/* 3-o'rin — bronza */
+.leader-row.rank-3 {
+  background: linear-gradient(100deg, #fdefe2, #f6dcc4 50%, #fdf3ea);
+  border-bottom-color: #e8c8a6;
+  font-weight: 800;
+}
+
+.leader-row.rank-3 strong {
+  color: #9a5f22;
+}
+
+.leader-row.me span {
+  text-decoration: underline;
+  text-decoration-color: var(--blue);
+  text-underline-offset: 3px;
+}
+
+@keyframes shine {
+  0% { left: -60%; }
+  55%, 100% { left: 130%; }
+}
+
+/* ===============================
+   PROFIL
+   =============================== */
+
+.modal-card.profile {
+  padding: 22px 20px 20px;
+}
+
+.close-x {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  border: 0;
+  background: transparent;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+#profileBody {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.profile-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-avatar {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: 16px;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 20px;
+  border: 3px solid #fff;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, .18);
+}
+
+.profile-id strong {
+  display: block;
+  font-size: 16px;
+  letter-spacing: -.5px;
+}
+
+.profile-id small {
+  display: block;
+  margin-top: 3px;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.profile-id small.on {
+  color: #16a34a;
+  font-weight: 800;
+}
+
+.profile-hero {
+  margin: 16px 0 12px;
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #1246d8, #3f6ff0);
+  color: #fff;
+}
+
+.profile-hero span {
+  display: block;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 1.4px;
+  opacity: .8;
+}
+
+.profile-hero strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 30px;
+  letter-spacing: -1.4px;
+}
+
+.profile-hero i {
+  font-style: normal;
+  font-size: 13px;
+  opacity: .8;
+}
+
+.profile-stats {
+  display: flex;
+  gap: 8px;
+}
+
+.profile-stats > div {
+  flex: 1;
+  padding: 11px 8px;
+  border-radius: 14px;
+  background: #f5f6f8;
+  text-align: center;
+}
+
+.profile-stats span {
+  display: block;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.profile-stats strong {
+  font-size: 13px;
+  letter-spacing: -.5px;
+}
+
+.profile-title {
+  margin: 18px 0 8px;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 1.4px;
+  color: var(--muted);
+}
+
+.loop-list {
+  max-height: 190px;
+  overflow-y: auto;
+  border-radius: 14px;
+  border: 1px solid #eceef1;
+}
+
+.loop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 13px;
+  border-bottom: 1px solid #f1f2f4;
+}
+
+.loop-row:last-child {
+  border-bottom: 0;
+}
+
+.loop-row strong {
+  font-size: 12px;
+}
+
+.loop-row span {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.ghost-btn {
+  width: 100%;
+  margin-top: 14px;
+  padding: 13px;
+  border: 1.5px solid var(--blue);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .8px;
+}
+
+.leader-row > i {
+  flex: 0 0 auto;
+}
+
+.leader-row > * {
+  position: relative;
+  z-index: 1;
+}

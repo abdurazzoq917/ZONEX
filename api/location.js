@@ -15,6 +15,8 @@ const {
   normalizeName,
   isNameTaken,
   distanceMeters,
+  publicPlayer,
+  publicList,
   RULES
 } = require("./_store");
 
@@ -109,17 +111,10 @@ module.exports = async function handler(req, res) {
     // Javob: butun dunyo
     // ---------------------------------------------------------
 
-    const list = Object.values(players).map((p) => ({
-      ...p,
-      online: Boolean(
-        p.location && now - Number(p.location.time || 0) < RULES.ONLINE_MS
-      )
-    }));
-
     return json(res, 200, {
       ok: true,
-      player,
-      players: list.sort((a, b) => Number(b.area || 0) - Number(a.area || 0)),
+      player: publicPlayer(player, id),
+      players: publicList(players, id),
       time: now
     });
   } catch (error) {

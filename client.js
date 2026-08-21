@@ -8,10 +8,12 @@
 //  - Bitta qurilma = bitta akkaunt
 //  - Odamlar bir-birini jonli ko'radi va xarita yangilanganda
 //    yo'qolib qolmaydi
-//  - Yurib yopilgan hudud xaritada QOLADI — u yerning egasi
-//    o'sha odam bo'ladi
+//  - Yo'l o'zini kesib o'tsa (A nuqta B nuqta bilan kesishsa)
+//    o'sha halqa darhol odamning yeri bo'ladi va SAQLANIB
+//    qoladi — yurish esa to'xtamaydi
+//  - Yurishni faqat odam o'zi tugatadi (avto yopilmaydi)
 //  - Begona hududdan aylanib o'tsang — o'sha yer senga o'tadi
-//  - Mashina / velosiped / samokat tezligida hudud yozilmaydi
+//  - 23 km/soatdan tez harakatda hudud yozilmaydi
 // ============================================================
 
 const $ = (s) => document.querySelector(s);
@@ -21,12 +23,12 @@ const $ = (s) => document.querySelector(s);
 // ============================================================
 
 const CONFIG = {
-  // Piyoda yurish chegarasi (km/soat).
+  // Yurish chegarasi (km/soat).
   // Bundan tez — transport hisoblanadi, hudud yozilmaydi.
-  MAX_SPEED_KMH: 12,
+  MAX_SPEED_KMH: 23,
 
   // Butun aylanish bo'yicha o'rtacha tezlik (km/soat)
-  MAX_AVG_SPEED_KMH: 10,
+  MAX_AVG_SPEED_KMH: 23,
 
   // GPS aniqligi shundan yomon bo'lsa — nuqta hisobga olinmaydi
   MAX_ACCURACY: 60,
@@ -173,6 +175,11 @@ const state = {
   preview: null,
   timer: null,
 
+  // hozirgi halqa (oxirgi kesishishdan beri)
+  loopStarted: 0,
+  loopDistance: 0,
+  loops: 0,
+
   // dunyo
   players: [],
   playerMap: new Map(),
@@ -180,6 +187,10 @@ const state = {
   markers: new Map(),
   worldTimer: null,
   liveOpen: false,
+  worldTime: 0,
+
+  // ochiq profil (boshqa odamniki ham bo'lishi mumkin)
+  profileId: "",
 
   // server hali tasdiqlamagan (yoki yubarilmagan) hududlarim
   pending: [],
@@ -251,6 +262,70 @@ function polygonArea(points) {
   }
 
   return Math.abs(sum / 2);
+}
+
+// ------------------------------------------------------------
+// A NUQTA — B NUQTA KESISHISHI
+// ------------------------------------------------------------
+//
+// Ikki kesma kesishsa — kesishgan nuqtani qaytaradi.
+// Kesishmasa — null.
+// ------------------------------------------------------------
+
+function segmentsCross(a, b, c, d) {
+  const x1 = a[1];
+  const y1 = a[0];
+  const x2 = b[1];
+  const y2 = b[0];
+  const x3 = c[1];
+  const y3 = c[0];
+  const x4 = d[1];
+  const y4 = d[0];
+
+  const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+  // Parallel yoki bir chiziqda
+  if (Math.abs(den) < 1e-14) return null;
+
+  const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+  const u = ((x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2)) / den;
+
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+
+  return [y1 + t * (y2 - y1), x1 + t * (x2 - x1)];
+}
+
+// ------------------------------------------------------------
+// HALQA IZLASH
+// ------------------------------------------------------------
+//
+// Oxirgi qadam eski yo'lni kesib o'tdimi? Kesib o'tgan bo'lsa —
+// o'sha yerda YOPIQ HALQA hosil bo'ladi va u odamning yeri
+// bo'ladi.
+// ------------------------------------------------------------
+
+function findLoop(points) {
+  const n = points.length;
+
+  if (n < 5) return null;
+
+  const c = points[n - 2];
+  const d = points[n - 1];
+
+  // n-3 — oxirgi kesma bilan umumiy nuqtasi bor, u hisobga olinmaydi
+  for (let i = 0; i < n - 3; i++) {
+    const cross = segmentsCross(points[i], points[i + 1], c, d);
+
+    if (!cross) continue;
+
+    const ring = [cross].concat(points.slice(i + 1, n - 1));
+
+    if (ring.length < 3) continue;
+
+    return { ring, index: i, cross };
+  }
+
+  return null;
 }
 
 // Rang — server bilan bir xil formula (qurilma ID bo'yicha)
@@ -398,10 +473,15 @@ function playerMarker(player) {
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
-  return L.marker([lat, lng], {
+  const marker = L.marker([lat, lng], {
     icon: playerIcon(player),
     interactive: true
   }).addTo(state.map);
+
+  // Odamning ustiga bosilsa — uning profili ochiladi
+  marker.on("click", () => openProfile(player.id));
+
+  return marker;
 }
 
 // ------------------------------------------------------------
@@ -436,6 +516,7 @@ function drawZone(key, territory, player, isMe) {
     weight: isMe ? 3 : 2
   }).addTo(state.map);
 
+  // Hududning ustida egasining useri turadi
   polygon.bindTooltip(
     '<span style="color:' + esc(color) + '">@' + esc(player.name) + "</span>",
     {
@@ -444,6 +525,13 @@ function drawZone(key, territory, player, isMe) {
       className: "owner-label"
     }
   );
+
+  // Hudud bosilsa — egasining profili ochiladi
+  polygon.on("click", (event) => {
+    if (event.originalEvent) L.DomEvent.stopPropagation(event);
+
+    openProfile(player.id);
+  });
 
   state.zoneLayers.set(key, {
     layer: polygon,
@@ -571,7 +659,9 @@ function renderMarkers() {
 // ------------------------------------------------------------
 
 function mergePlayers(incoming) {
-  const next = new Map();
+  // Eskilarni SAQLAB qolamiz: bitta so'rov to'liq kelmasa ham
+  // odamlar va hududlar xaritadan yo'qolmaydi.
+  const next = new Map(state.playerMap);
 
   incoming.forEach((player) => {
     if (!player || player.id == null) return;
@@ -615,6 +705,22 @@ function myTerritories(me) {
   if (state.pending.length !== before) savePending();
 
   return server.concat(state.pending);
+}
+
+// Serverdan kelgan javobni qo'llaymiz.
+//
+// Kechikib kelgan ESKI javob yangisining ustiga yozilmasin —
+// aks holda bosib olingan hudud qaytib paydo bo'ladi.
+function applyWorld(data) {
+  if (!data || !Array.isArray(data.players)) return;
+
+  const stamp = Number(data.time || 0);
+
+  if (stamp && state.worldTime && stamp < state.worldTime) return;
+
+  if (stamp) state.worldTime = stamp;
+
+  renderWorld(data.players);
 }
 
 function renderWorld(players) {
@@ -665,6 +771,7 @@ function renderWorld(players) {
   updateMyCard(me, mine);
   renderBoard();
   renderLive();
+  refreshProfile();
 }
 
 function updateMyCard(me, mine) {
@@ -727,9 +834,7 @@ async function fetchWorld() {
   try {
     const { ok, data } = await api("/api/world?t=" + Date.now());
 
-    if (ok && Array.isArray(data.players)) {
-      renderWorld(data.players);
-    }
+    if (ok) applyWorld(data);
   } catch {
     // Internet uzildi — xaritadagi hech narsa o'chirilmaydi
   }
@@ -761,9 +866,7 @@ async function sendLocation(point, accuracy) {
       accuracy
     });
 
-    if (ok && Array.isArray(data.players)) {
-      renderWorld(data.players);
-    }
+    if (ok) applyWorld(data);
   } catch {
     /* keyingi urinishda ketadi */
   }
@@ -788,7 +891,9 @@ function speedWarning(show, kmh) {
     box.textContent =
       "Juda tez (" +
       kmh.toFixed(0) +
-      " km/soat) — hudud yozilmayapti. Piyoda yuring.";
+      " km/soat) — hudud yozilmayapti. Chegara " +
+      CONFIG.MAX_SPEED_KMH +
+      " km/soat.";
 
     box.classList.add("show");
   } else {
@@ -967,20 +1072,88 @@ function walkPoint(point, accuracy) {
 
   if (previous && hav(previous, point) < CONFIG.MIN_STEP) return;
 
-  if (previous) state.distance += hav(previous, point);
+  if (previous) {
+    const step = hav(previous, point);
+
+    state.distance += step;
+    state.loopDistance += step;
+  }
 
   state.points.push(point);
 
+  // ---- A nuqta B nuqta bilan kesishdimi? ----
+  //
+  // Kesishgan bo'lsa — o'sha halqa odamning yeri bo'ladi,
+  // lekin YURISH TO'XTAMAYDI. Yurishni faqat odam o'zi
+  // tugatadi.
+  checkLoop(point);
+
   drawTrack();
   updateStats();
+}
 
-  // ---- Boshlang'ich nuqtaga qaytdi ----
+// ------------------------------------------------------------
+// KESISHISH TEKSHIRUVI
+// ------------------------------------------------------------
+
+function checkLoop(point) {
+  let found = findLoop(state.points);
+
+  // Kesishmagan bo'lsa — boshlang'ich nuqtaga qaytish ham
+  // halqa deb hisoblanadi (GPS aniq kesishmasligi mumkin)
   if (
+    !found &&
     state.points.length > 8 &&
     hav(state.points[0], point) < CONFIG.CLOSE_RADIUS
   ) {
-    finishWalk(true);
+    found = {
+      ring: state.points.slice(),
+      index: 0,
+      cross: state.points[0]
+    };
   }
+
+  if (!found) return;
+
+  const ring = found.ring;
+
+  const area = Math.round(polygonArea(ring));
+
+  // Juda kichkina halqa (GPS titrashi) — kesib tashlaymiz,
+  // yurish davom etadi
+  if (area < 50 || ring.length < 4) {
+    state.points = state.points
+      .slice(0, found.index + 1)
+      .concat([found.cross, point]);
+
+    return;
+  }
+
+  const duration = Math.max(
+    1,
+    Math.round((Date.now() - (state.loopStarted || state.started)) / 1000)
+  );
+
+  const walked = Math.round(state.loopDistance || perimeter(ring));
+
+  // Yangi halqa kesishgan nuqtadan boshlanadi
+  state.points = [found.cross, point];
+
+  state.loopStarted = Date.now();
+  state.loopDistance = hav(found.cross, point);
+  state.loops += 1;
+
+  claimArea(ring, walked, duration);
+}
+
+function perimeter(ring) {
+  let total = 0;
+
+  for (let i = 1; i < ring.length; i++) {
+    total += hav(ring[i - 1], ring[i]);
+  }
+
+  return total + hav(ring[ring.length - 1], ring[0]);
 }
 
 function drawTrack() {
@@ -1015,6 +1188,9 @@ function resetTrack() {
   state.distance = 0;
   state.started = Date.now();
 
+  state.loopStarted = Date.now();
+  state.loopDistance = 0;
+
   if (state.line) state.line.remove();
   if (state.preview) state.preview.remove();
 
@@ -1035,6 +1211,7 @@ function clearTrack() {
 
   state.points = [];
   state.distance = 0;
+  state.loopDistance = 0;
 }
 
 function updateStats() {
@@ -1059,7 +1236,10 @@ function updateStats() {
     const area = Math.round(polygonArea(state.points));
 
     $("#areaStatus").textContent =
-      "Hozirgi aylana: ~" + area.toLocaleString() + " m²";
+      (state.loops ? state.loops + " ta hudud yopildi · " : "") +
+      "hozirgi aylana ~" +
+      area.toLocaleString() +
+      " m²";
   }
 }
 
@@ -1076,18 +1256,23 @@ function startWalk() {
   state.active = true;
   state.maxSpeed = 0;
   state.tooFast = false;
+  state.loops = 0;
 
   resetTrack();
 
   $("#startBtn")?.classList.add("running");
 
   if ($("#startText")) $("#startText").textContent = "YURISHNI YAKUNLASH";
-  if ($("#hint")) $("#hint").textContent = "Boshlagan nuqtangizga qayting";
+
+  if ($("#hint")) {
+    $("#hint").textContent =
+      "Yo'lingizni kesib o'ting — o'sha joy sizniki bo'ladi";
+  }
 
   clearInterval(state.timer);
   state.timer = setInterval(updateStats, 1000);
 
-  toast("Yurish boshlandi — piyoda yuring!");
+  toast("Yurish boshlandi — yo'lingizni kesib halqa yasang!");
 }
 
 // ------------------------------------------------------------
@@ -1159,9 +1344,7 @@ async function flushPending() {
     try {
       const result = await pushTerritory(entry);
 
-      if (result.ok && Array.isArray(result.data.players)) {
-        renderWorld(result.data.players);
-      }
+      if (result.ok) applyWorld(result.data);
     } catch {
       /* internet yo'q — keyingi safar */
     }
@@ -1172,60 +1355,38 @@ async function flushPending() {
   state.sending = false;
 }
 
-async function finishWalk(closed) {
-  if (!state.active) return;
+// ------------------------------------------------------------
+// HALQANI EGALLASH
+// ------------------------------------------------------------
+//
+// Yopilgan halqa DARHOL odamning yeri bo'ladi: xaritada
+// ko'rinadi, lokal saqlanadi va serverga yuboriladi. Internet
+// uzilsa ham yo'qolmaydi — keyin o'zi qayta ketadi.
+// ------------------------------------------------------------
 
-  state.active = false;
+async function claimArea(ring, walked, duration) {
+  const area = Math.round(polygonArea(ring));
 
-  clearInterval(state.timer);
-
-  speedWarning(false, 0);
-
-  $("#startBtn")?.classList.remove("running");
-
-  if ($("#startText")) $("#startText").textContent = "YURISHNI BOSHLASH";
-
-  if ($("#hint")) {
-    $("#hint").textContent = "Boshlagan joyingizga qaytib, hududni yoping";
-  }
-
-  const duration = Math.round((Date.now() - state.started) / 1000);
-
-  if (state.points.length < 4) {
-    toast("Hudud yaratish uchun ko'proq yuring");
-    fetchWorld();
-    return;
-  }
-
-  const gap = hav(state.points[0], state.points.at(-1));
-
-  if (!closed && gap > 40) {
-    toast("Hudud yopilmadi — boshlagan nuqtaga qayting");
-    fetchWorld();
-    return;
-  }
-
-  const avgSpeed = duration > 0 ? (state.distance / duration) * 3.6 : 0;
+  const avgSpeed = duration > 0 ? (walked / duration) * 3.6 : 0;
 
   if (avgSpeed > CONFIG.MAX_AVG_SPEED_KMH) {
     toast(
       "O'rtacha tezlik " +
         avgSpeed.toFixed(1) +
-        " km/soat — hudud faqat piyoda yurganda egallanadi"
+        " km/soat — chegara " +
+        CONFIG.MAX_AVG_SPEED_KMH +
+        " km/soat"
     );
 
-    clearTrack();
-    fetchWorld();
     return;
   }
 
-  // ---- Hudud shu zahoti "meniki" bo'ladi ----
   const entry = {
     id: localTerritoryId(),
-    points: state.points.slice(),
-    area: Math.round(polygonArea(state.points)),
+    points: ring.slice(),
+    area,
     duration,
-    distance: Math.round(state.distance),
+    distance: Math.round(walked),
     maxSpeed: Math.round(state.maxSpeed * 10) / 10,
     createdAt: Date.now(),
     sent: false,
@@ -1233,8 +1394,6 @@ async function finishWalk(closed) {
   };
 
   addPending(entry);
-
-  clearTrack();
 
   // Xaritada darhol ko'rinsin (server javobini kutmasdan)
   renderWorld(state.players);
@@ -1261,35 +1420,103 @@ async function finishWalk(closed) {
 
   const data = result.data;
 
-  if (Array.isArray(data.players)) renderWorld(data.players);
+  applyWorld(data);
 
-  const area = data.territory ? Number(data.territory.area || 0) : entry.area;
+  const saved = data.territory ? Number(data.territory.area || 0) : area;
+
+  const km = (walked / 1000).toFixed(2);
 
   if (data.captured && data.captured.length) {
     const names = data.captured.map((c) => "@" + c.ownerName).join(", ");
 
     toast(
-      "+" + area.toLocaleString() + " m² · " + names + " hududi bosib olindi!"
+      "+" +
+        saved.toLocaleString() +
+        " m² (" +
+        km +
+        " km) · " +
+        names +
+        " hududi bosib olindi!"
     );
   } else {
-    toast("+" + area.toLocaleString() + " m² hudud egallandi!");
+    toast("+" + saved.toLocaleString() + " m² · " + km + " km — sizniki!");
   }
+}
+
+// ------------------------------------------------------------
+// YURISHNI TUGATISH — faqat odam o'zi bosganda
+// ------------------------------------------------------------
+
+async function finishWalk() {
+  if (!state.active) return;
+
+  state.active = false;
+
+  clearInterval(state.timer);
+
+  speedWarning(false, 0);
+
+  $("#startBtn")?.classList.remove("running");
+
+  if ($("#startText")) $("#startText").textContent = "YURISHNI BOSHLASH";
+
+  if ($("#hint")) {
+    $("#hint").textContent =
+      "Yo'lingizni kesib o'ting — o'sha joy sizniki bo'ladi";
+  }
+
+  const ring = state.points.slice();
+
+  const duration = Math.max(
+    1,
+    Math.round((Date.now() - (state.loopStarted || state.started)) / 1000)
+  );
+
+  const walked = state.loopDistance;
+
+  const loops = state.loops;
+
+  clearTrack();
+
+  // Oxirgi yo'l ham yopiq bo'lsa — u ham hudud bo'ladi
+  const gap = ring.length > 3 ? hav(ring[0], ring[ring.length - 1]) : Infinity;
+
+  if (ring.length >= 4 && gap <= 40 && polygonArea(ring) >= 50) {
+    await claimArea(ring, walked || perimeter(ring), duration);
+  } else if (!loops) {
+    toast("Hudud yopilmadi — yo'lingizni kesib o'ting yoki boshiga qayting");
+  } else {
+    toast(loops + " ta hudud egallandi. Yurish tugadi.");
+  }
+
+  fetchWorld();
 }
 
 // ============================================================
 // REYTING — eng katta maydon birinchi
 // ============================================================
 
+const MEDALS = ["🥇", "🥈", "🥉"];
+
 function renderBoard() {
   if (!$("#leaderRows")) return;
 
+  // Ro'yxatdan o'tgan HAR BIR odam reytingda bo'ladi —
+  // hali hudud egallamagan bo'lsa ham.
   const rows = state.players
-    .filter((p) => Number(p.area || 0) > 0)
-    .sort((a, b) => Number(b.area || 0) - Number(a.area || 0));
+    .filter((p) => p && p.name)
+    .sort((a, b) => {
+      const diff = Number(b.area || 0) - Number(a.area || 0);
+
+      if (diff) return diff;
+
+      // Maydonlari teng — avval ro'yxatdan o'tgani yuqorida
+      return Number(a.createdAt || 0) - Number(b.createdAt || 0);
+    });
 
   if (!rows.length) {
     $("#leaderRows").innerHTML =
-      '<div class="live-empty">Hozircha hech kim hudud egallamagan</div>';
+      '<div class="live-empty">Hozircha hech kim yo\'q</div>';
 
     return;
   }
@@ -1298,13 +1525,19 @@ function renderBoard() {
     .map((player, index) => {
       const isMe = String(player.id) === String(state.id);
 
+      const rankClass = index < 3 ? " rank-" + (index + 1) : "";
+
+      const badge = index < 3 ? MEDALS[index] : String(index + 1);
+
       return (
-        '<div class="leader-row' +
+        '<button class="leader-row' +
         (isMe ? " me" : "") +
-        (index === 0 ? " top" : "") +
+        rankClass +
+        '" type="button" data-player-id="' +
+        esc(player.id) +
         '">' +
-        "<b>" +
-        (index + 1) +
+        '<b class="rank">' +
+        badge +
         "</b>" +
         '<i style="background:' +
         esc(player.color || colorFromId(player.id)) +
@@ -1316,10 +1549,176 @@ function renderBoard() {
         "<strong>" +
         Math.round(Number(player.area || 0)).toLocaleString() +
         " m²</strong>" +
-        "</div>"
+        "</button>"
       );
     })
     .join("");
+}
+
+// ============================================================
+// PROFIL — o'zingizniki ham, boshqa odamniki ham
+// ============================================================
+//
+// Xaritadagi odam, uning hududi, reyting qatori yoki jonli
+// ro'yxat bosilganda ochiladi.
+//
+// Ichida: qancha m² hududi bor va bitta kesishishda
+// (bitta halqada) qancha km yurgani.
+// ============================================================
+
+function playerById(id) {
+  return state.players.find((p) => String(p.id) === String(id)) || null;
+}
+
+// O'zimniki bo'lsa — hali serverga yetib bormaganlari ham qo'shiladi
+function territoriesOf(player) {
+  if (!player) return [];
+
+  if (String(player.id) === String(state.id)) {
+    return myTerritories(player);
+  }
+
+  return Array.isArray(player.territories) ? player.territories : [];
+}
+
+function loopRow(territory) {
+  const area = Math.round(Number(territory.area) || 0);
+
+  const meters = Number(territory.distance) || 0;
+
+  const km = meters ? (meters / 1000).toFixed(2) + " km" : "— km";
+
+  const minutes = Number(territory.duration)
+    ? Math.round(Number(territory.duration) / 60) + " daq"
+    : "";
+
+  return (
+    '<div class="loop-row">' +
+    "<strong>" +
+    area.toLocaleString() +
+    " m²</strong>" +
+    "<span>" +
+    km +
+    (minutes ? " · " + minutes : "") +
+    "</span>" +
+    "</div>"
+  );
+}
+
+function openProfile(id) {
+  const player = playerById(id);
+
+  if (!player) return;
+
+  state.profileId = String(player.id);
+
+  const modal = $("#profileModal");
+
+  if (!modal) return;
+
+  // Jonli yangilanganda ro'yxat boshiga sakramasin
+  const scroll = $("#profileBody") ? $("#profileBody").scrollTop : 0;
+
+  const isMe = String(player.id) === String(state.id);
+
+  const color = player.color || colorFromId(player.id);
+
+  const zones = territoriesOf(player)
+    .slice()
+    .sort((a, b) => Number(b.area || 0) - Number(a.area || 0));
+
+  const area = zones.reduce((sum, t) => sum + (Number(t.area) || 0), 0);
+
+  const walked = zones.reduce((sum, t) => sum + (Number(t.distance) || 0), 0);
+
+  const best = zones.length ? Number(zones[0].area) || 0 : 0;
+
+  const now = Date.now();
+
+  const online = Boolean(
+    player.location && now - Number(player.location.time || 0) < CONFIG.ONLINE_MS
+  );
+
+  const rank =
+    state.players
+      .filter((p) => p && p.name)
+      .sort((a, b) => Number(b.area || 0) - Number(a.area || 0))
+      .findIndex((p) => String(p.id) === String(player.id)) + 1;
+
+  $("#profileBody").innerHTML =
+    '<div class="profile-top">' +
+    '<div class="profile-avatar" style="background:' +
+    esc(color) +
+    '">' +
+    esc((player.name || "Z")[0].toUpperCase()) +
+    "</div>" +
+    "<div class='profile-id'>" +
+    "<strong>@" +
+    esc(player.name) +
+    (isMe ? " (Siz)" : "") +
+    "</strong>" +
+    '<small class="' +
+    (online ? "on" : "off") +
+    '">' +
+    (online ? "hozir onlayn" : "oflayn") +
+    (rank ? " · reytingda " + rank + "-o'rin" : "") +
+    "</small>" +
+    "</div>" +
+    "</div>" +
+    '<div class="profile-hero">' +
+    "<span>JAMI HUDUDI</span>" +
+    "<strong>" +
+    Math.round(area).toLocaleString() +
+    " <i>m²</i></strong>" +
+    "</div>" +
+    '<div class="profile-stats">' +
+    "<div><span>HUDUDLAR</span><strong>" +
+    zones.length +
+    "</strong></div>" +
+    "<div><span>ENG KATTA</span><strong>" +
+    Math.round(best).toLocaleString() +
+    "</strong></div>" +
+    "<div><span>JAMI YURGAN</span><strong>" +
+    (walked / 1000).toFixed(2) +
+    " km</strong></div>" +
+    "</div>" +
+    '<p class="profile-title">HAR BIR KESISHISH</p>' +
+    (zones.length
+      ? '<div class="loop-list">' + zones.map(loopRow).join("") + "</div>"
+      : '<div class="live-empty">Hali hudud egallamagan</div>') +
+    (player.location
+      ? '<button class="ghost-btn" id="profileLocate">XARITADA KO\'RSATISH</button>'
+      : "");
+
+  if (scroll) $("#profileBody").scrollTop = scroll;
+
+  modal.classList.add("active");
+
+  $("#profileLocate")?.addEventListener("click", () => {
+    if (!player.location || !state.map) return;
+
+    state.map.flyTo(
+      [Number(player.location.lat), Number(player.location.lng)],
+      17,
+      { duration: 1 }
+    );
+
+    modal.classList.remove("active");
+  });
+}
+
+function closeProfile() {
+  state.profileId = "";
+  $("#profileModal")?.classList.remove("active");
+}
+
+// Profil ochiq turganda ma'lumot jonli yangilanib tursin
+function refreshProfile() {
+  if (!state.profileId) return;
+
+  if (!$("#profileModal")?.classList.contains("active")) return;
+
+  openProfile(state.profileId);
 }
 
 // ============================================================
@@ -1400,22 +1799,10 @@ function bindLive() {
 
     if (!button) return;
 
-    const person = state.players.find(
-      (p) => String(p.id) === String(button.dataset.playerId)
-    );
-
-    if (!person || !person.location || !state.map) return;
-
-    state.map.flyTo(
-      [Number(person.location.lat), Number(person.location.lng)],
-      17,
-      { duration: 1 }
-    );
-
     state.liveOpen = false;
     $("#livePanel")?.classList.remove("open");
 
-    toast("@" + person.name + " joylashuvi");
+    openProfile(button.dataset.playerId);
   });
 }
 
@@ -1554,7 +1941,7 @@ function bindButtons() {
 
   $("#startBtn")?.addEventListener("click", () => {
     if (state.active) {
-      finishWalk(false);
+      finishWalk();
     } else {
       startWalk();
     }
@@ -1575,6 +1962,33 @@ function bindButtons() {
 
   $("#closeBoard")?.addEventListener("click", () => {
     $("#leaderboard")?.classList.remove("open");
+  });
+
+  // Reyting qatori bosilsa — o'sha odamning profili
+  $("#leaderRows")?.addEventListener("click", (event) => {
+    const row = event.target.closest(".leader-row");
+
+    if (!row) return;
+
+    $("#leaderboard")?.classList.remove("open");
+
+    openProfile(row.dataset.playerId);
+  });
+
+  // O'z profilim
+  $("#profileBtn")?.addEventListener("click", () => {
+    if (!state.name) {
+      $("#welcomeModal")?.classList.add("active");
+      return;
+    }
+
+    openProfile(state.id);
+  });
+
+  $("#closeProfile")?.addEventListener("click", closeProfile);
+
+  $("#profileModal")?.addEventListener("click", (event) => {
+    if (event.target === $("#profileModal")) closeProfile();
   });
 
   bindLive();

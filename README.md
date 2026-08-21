@@ -21,8 +21,13 @@ ishlaydi.
 2. Bitta usernameni ikki kishi ololmaydi (server 409 `name_taken` qaytaradi).
    Katta-kichik harf farq qilmaydi: `Ali` va `ali` — bitta username.
 3. Har kimning rangi qurilma ID'sidan hisoblanadi — hamma har xil rangda.
-4. Yurishni boshlab, boshlagan nuqtangizga qaytsangiz hudud yopiladi.
-   Yopilgan hudud xaritada **qoladi** — u yerning egasi siz bo'lasiz.
+4. **Yo'lingiz o'zini kesib o'tsa** (A nuqta B nuqta bilan kesishsa) —
+   o'sha halqa darhol sizniki bo'ladi va maydoni m² hisobingizga qo'shiladi.
+   Yurish esa TO'XTAMAYDI: bitta yurishda bir nechta hudud yopish mumkin.
+   Yurishni faqat o'zingiz "YURISHNI YAKUNLASH" tugmasi bilan tugatasiz —
+   dastur uni o'zi yopib qo'ymaydi.
+   Yopilgan hudud xaritada **qoladi** — u yerning egasi siz bo'lasiz va
+   ustida username'ingiz yozilib turadi.
    Internet uzilsa ham hudud telefonda saqlanib turadi va aloqa tiklanganda
    o'zi serverga yuboriladi.
 5. Hududlar serverda saqlanadi — chiqib qayta kirsangiz ham joyida qoladi.
@@ -31,11 +36,15 @@ ishlaydi.
    - qisman ustidan yursangiz, faqat siz yurib o'tgan qism sizga o'tadi va
      eski egasining maydonidan chiqariladi (bir joy ikki marta sanalmaydi);
    - yeringizni qaytarib olish uchun o'sha joydan qayta aylaning.
-7. Reytingda eng katta maydonga ega odam birinchi turadi.
-8. **Tezlik cheklovi:** o'rtacha 10 km/soatdan tez bo'lsa hudud yozilmaydi.
-   Bir lahzalik tezlik 12 km/soatdan oshsa — nuqtalar yozilmaydi va
-   ogohlantirish chiqadi. Mashina, velosiped, samokatda hudud egallab
-   bo'lmaydi; piyoda yurganda esa hudud egallanaveradi.
+7. Reytingda eng katta maydonga ega odam birinchi turadi. Ro'yxatdan
+   o'tgan HAR BIR odam reytingda ko'rinadi — hali hudud egallamagan
+   bo'lsa ham. 1-, 2- va 3-o'rinlar oltin, kumush va bronza bilan
+   ajratib ko'rsatiladi.
+8. **Tezlik cheklovi: 23 km/soat.** O'rtacha yoki bir lahzalik tezlik
+   shundan oshsa — nuqtalar yozilmaydi va ogohlantirish chiqadi.
+9. Xaritadagi odamning, uning hududining, reyting qatorining yoki jonli
+   ro'yxatdagi nomining ustiga bossangiz — **profili** ochiladi: jami
+   necha m² hududi bor va har bir kesishishda necha km yurgani ko'rinadi.
 
 Qoidalarni `api/_store.js` faylidagi `RULES` obyektidan o'zgartirish mumkin.
 

@@ -17,7 +17,11 @@ const routes = {
   "/api/world": require("./api/world"),
   "/api/register": require("./api/register"),
   "/api/location": require("./api/location"),
-  "/api/territory": require("./api/territory")
+  "/api/territory": require("./api/territory"),
+  "/api/avatar": require("./api/avatar"),
+  "/api/moderate": require("./api/moderate"),
+  "/api/friends": require("./api/friends"),
+  "/api/messages": require("./api/messages")
 };
 
 const types = {

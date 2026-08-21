@@ -16,7 +16,11 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const world = await getWorld();
+    // ?id=<qurilma> — o'ziga tegishli maxfiy maydonlar
+    // (kelgan/yuborilgan do'stlik so'rovlari) ham qaytadi
+    const params = new URLSearchParams(req.url.split("?")[1] || "");
+
+    const world = await getWorld(String(params.get("id") || "").trim());
 
     return json(res, 200, {
       ok: true,
