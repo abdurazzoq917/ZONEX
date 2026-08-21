@@ -553,3 +553,27 @@
   position: relative;
   z-index: 1;
 }
+
+/* ===============================
+   ADMIN NISHONI — (admin) @user
+   =============================== */
+
+.admin-tag {
+  color: #16a34a;
+  font-weight: 900;
+  letter-spacing: -.2px;
+}
+
+/* Qora fondagi xarita yorlig'ida ochroq yashil */
+.zx-name .admin-tag {
+  color: #4ade80;
+}
+
+/* Hudud ustidagi yorliqda oq kontur bilan yaxshi ko'rinsin */
+.owner-label .admin-tag {
+  color: #15803d;
+}
+
+.profile-id .admin-tag {
+  font-size: 13px;
+}

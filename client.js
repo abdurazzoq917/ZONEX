@@ -67,6 +67,10 @@ const CONFIG = {
 const NAME_MIN = 3;
 const NAME_MAX = 16;
 
+// Admin username — server bilan bir xil
+// (o'zgartirilsa: .env dagi ADMIN_USERNAME)
+const ADMIN_NAME = "abdumalikov";
+
 // ============================================================
 // QURILMA ID — bitta qurilma, bitta akkaunt
 // ============================================================
@@ -225,6 +229,33 @@ function esc(value) {
         '"': "&quot;",
         "'": "&#039;"
       }[c])
+  );
+}
+
+// ------------------------------------------------------------
+// ADMIN NISHONI
+// ------------------------------------------------------------
+//
+// Admin username'i oldida yashil (admin) yozuvi turadi:
+//
+//     (admin) @Abdumalikov
+// ------------------------------------------------------------
+
+function isAdmin(player) {
+  if (!player) return false;
+
+  if (player.role === "admin") return true;
+
+  return String(player.name || "").trim().toLowerCase() === ADMIN_NAME;
+}
+
+// (admin) @username — kerak bo'lsa oxiriga qo'shimcha matn
+function nameHtml(player, suffix) {
+  return (
+    (isAdmin(player) ? '<b class="admin-tag">(admin)</b> ' : "") +
+    "@" +
+    esc(player && player.name) +
+    (suffix || "")
   );
 }
 
@@ -457,8 +488,8 @@ function playerIcon(player) {
       '<span class="zx-dot" style="background:' +
       esc(player.color || colorFromId(player.id)) +
       '"></span>' +
-      '<span class="zx-name">@' +
-      esc(player.name) +
+      '<span class="zx-name">' +
+      nameHtml(player) +
       "</span>" +
       "</div>",
 
@@ -518,7 +549,7 @@ function drawZone(key, territory, player, isMe) {
 
   // Hududning ustida egasining useri turadi
   polygon.bindTooltip(
-    '<span style="color:' + esc(color) + '">@' + esc(player.name) + "</span>",
+    '<span style="color:' + esc(color) + '">' + nameHtml(player) + "</span>",
     {
       permanent: true,
       direction: "center",
@@ -1542,9 +1573,8 @@ function renderBoard() {
         '<i style="background:' +
         esc(player.color || colorFromId(player.id)) +
         '"></i>' +
-        "<span>@" +
-        esc(player.name) +
-        (isMe ? " (Siz)" : "") +
+        "<span>" +
+        nameHtml(player, isMe ? " (Siz)" : "") +
         "</span>" +
         "<strong>" +
         Math.round(Number(player.area || 0)).toLocaleString() +
@@ -1653,9 +1683,8 @@ function openProfile(id) {
     esc((player.name || "Z")[0].toUpperCase()) +
     "</div>" +
     "<div class='profile-id'>" +
-    "<strong>@" +
-    esc(player.name) +
-    (isMe ? " (Siz)" : "") +
+    "<strong>" +
+    nameHtml(player, isMe ? " (Siz)" : "") +
     "</strong>" +
     '<small class="' +
     (online ? "on" : "off") +
@@ -1767,9 +1796,8 @@ function renderLive() {
         esc(p.color || colorFromId(p.id)) +
         '"></i>' +
         '<span class="live-player-info">' +
-        "<strong>@" +
-        esc(p.name) +
-        (isMe ? " (Siz)" : "") +
+        "<strong>" +
+        nameHtml(p, isMe ? " (Siz)" : "") +
         "</strong>" +
         "<small>" +
         Math.round(Number(p.area || 0)).toLocaleString() +
