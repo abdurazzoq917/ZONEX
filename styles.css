@@ -192,6 +192,10 @@
 .zonex-player-marker {
   background: transparent !important;
   border: 0 !important;
+
+  /* Har 3 sekundda sakramasin — joyiga silliq siljisin */
+  transition: transform .9s linear;
+  will-change: transform;
 }
 
 .zx-player {
@@ -223,4 +227,28 @@
 
 .owner-label span {
   font-size: 11px;
+}
+
+/* ===============================
+   USERNAME MAYDONI
+   =============================== */
+
+.hint-small {
+  margin: 6px 3px 0;
+  font-size: 8px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ===============================
+   REYTING
+   =============================== */
+
+.leader-row.me {
+  font-weight: 800;
+}
+
+.leader-row.top b:first-child {
+  color: #d4a017;
+  font-weight: 900;
 }

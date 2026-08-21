@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#f7f7f9" />
-  <title>ZONEX— Yur. Egalla. Himoya qil.</title>
+  <title>ZONEX — Yur. Egalla. Himoya qil.</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -15,7 +15,7 @@
   <div id="map" aria-label="Hududlar xaritasi"></div>
 
   <header class="topbar">
-    <button class="brand" id="brandBtn" aria-label="Bosh sahifa"><span>IZ</span><i>LA</i></button>
+    <button class="brand" id="brandBtn" aria-label="Bosh sahifa"><span>ZONE</span><i>X</i></button>
     <button class="live-pill" id="liveBtn" type="button">
   <b></b>
   <span>JONLI</span>
@@ -33,7 +33,7 @@
     </div>
   </div>
 </div>
-    <button class="avatar" id="profileBtn" aria-label="Profil"><span id="avatarLetter">I</span><em id="levelBadge">1</em></button>
+    <button class="avatar" id="profileBtn" aria-label="Profil"><span id="avatarLetter">Z</span><em id="levelBadge">1</em></button>
   </header>
 
   <section class="area-card glass">
@@ -69,14 +69,15 @@
 
   <div class="modal" id="welcomeModal">
     <div class="modal-card">
-      <div class="logo-mark"><span>IZ</span><i>LA</i></div>
+      <div class="logo-mark"><span>ZONE</span><i>X</i></div>
       <div class="mini-map"><div class="route-shape"></div><b class="pin p1"></b><b class="pin p2"></b></div>
       <p class="eyebrow">SHAHAR SENIKI</p>
       <h1>Yur. Egalla.<br><em>Himoya qil.</em></h1>
       <p class="intro">Yurgan yo‘lingiz bilan hudud yarating. Kattaroq maydonni aylanib, raqiblaringiz yerini egallang.</p>
-      <label for="nameInput">ISMINGIZ</label>
-      <input id="nameInput" maxlength="20" autocomplete="name" placeholder="Masalan, Jasur" />
-      <p class="error" id="nameError">Davom etish uchun ismingizni yozing</p>
+      <label for="nameInput">USERNAME</label>
+      <input id="nameInput" maxlength="16" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" placeholder="masalan, jasur_07" />
+      <p class="hint-small">Faqat harf, raqam, «_» va «.» — bitta usernameni ikki kishi ola olmaydi</p>
+      <p class="error" id="nameError">Davom etish uchun username yozing</p>
       <button class="primary" id="continueBtn">DAVOM ETISH <span>→</span></button>
       <small class="terms">Davom etib, xavfsizlik qoidalariga rozilik bildirasiz</small>
     </div>

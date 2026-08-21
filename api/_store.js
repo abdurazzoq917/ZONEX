@@ -62,7 +62,15 @@ const RULES = {
   ONLINE_MS: 120000,
 
   // Hudud bosib olinishi uchun kerakli qamrov (0..1).
-  CAPTURE_RATIO: 0.55
+  //
+  // Yangi aylana eski hududning yarmini qoplasa — o'sha hudud
+  // yangi egasiga o'tadi. To'liq aylanib o'tilsa (ichiga olinsa)
+  // qamrov 1 ga teng bo'ladi va hudud albatta qo'lga o'tadi.
+  CAPTURE_RATIO: 0.5,
+
+  // Username uzunligi
+  NAME_MIN: 3,
+  NAME_MAX: 16
 };
 
 // ============================================================
@@ -192,24 +200,122 @@ function pointInPolygon(point, polygon) {
   return inside;
 }
 
+// Ko'p nuqtali halqani tekislaymiz — tekshiruvlar tez ishlashi uchun
+function simplifyPoints(points, max) {
+  if (!Array.isArray(points)) return [];
+
+  const limit = Math.max(8, Number(max) || 120);
+
+  if (points.length <= limit) return points;
+
+  const step = points.length / limit;
+  const out = [];
+
+  for (let i = 0; i < limit; i++) {
+    out.push(points[Math.floor(i * step)]);
+  }
+
+  return out;
+}
+
+function bboxOf(points) {
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLng = Infinity;
+  let maxLng = -Infinity;
+
+  points.forEach((p) => {
+    const lat = Number(p[0]);
+    const lng = Number(p[1]);
+
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+    if (lng < minLng) minLng = lng;
+    if (lng > maxLng) maxLng = lng;
+  });
+
+  return { minLat, maxLat, minLng, maxLng };
+}
+
 // Eski hududning qancha qismi yangi hudud ichida qolgani (0..1)
+//
+// Faqat burchak nuqtalari emas, hududning ichki maydoni ham
+// tekshiriladi: shuning uchun kichkina hududni atrofidan
+// aylanib o'tish ham "bosib olish" deb hisoblanadi.
 function coverageRatio(target, polygon) {
   if (!Array.isArray(target) || target.length < 3) return 0;
+  if (!Array.isArray(polygon) || polygon.length < 3) return 0;
+
+  const ring = simplifyPoints(target, 160);
+  const clip = simplifyPoints(polygon, 200);
 
   let inside = 0;
 
-  target.forEach((p) => {
-    if (pointInPolygon(p, polygon)) inside++;
+  ring.forEach((p) => {
+    if (pointInPolygon(p, clip)) inside++;
   });
 
-  const ratio = inside / target.length;
+  const ratio = inside / ring.length;
+
+  // Hammasi ichida — to'liq aylanib o'tilgan
+  if (inside === ring.length) return 1;
 
   // Markazi ham ichida bo'lsa — bosib olingan deb hisoblaymiz
-  if (ratio > 0.3 && pointInPolygon(centroid(target), polygon)) {
+  if (ratio > 0.3 && pointInPolygon(centroid(ring), clip)) {
     return Math.max(ratio, RULES.CAPTURE_RATIO);
   }
 
   return ratio;
+}
+
+// Ikki hudud ustma-ust tushgan joyning taxminiy maydoni (m2).
+//
+// Kesishmani aniq hisoblash o'rniga to'rli (grid) namuna olinadi —
+// bu yetarlicha aniq va juda tez ishlaydi.
+function overlapArea(a, b) {
+  if (!Array.isArray(a) || a.length < 3) return 0;
+  if (!Array.isArray(b) || b.length < 3) return 0;
+
+  const ringA = simplifyPoints(a, 160);
+  const ringB = simplifyPoints(b, 160);
+
+  const boxA = bboxOf(ringA);
+  const boxB = bboxOf(ringB);
+
+  const minLat = Math.max(boxA.minLat, boxB.minLat);
+  const maxLat = Math.min(boxA.maxLat, boxB.maxLat);
+  const minLng = Math.max(boxA.minLng, boxB.minLng);
+  const maxLng = Math.min(boxA.maxLng, boxB.maxLng);
+
+  if (!(maxLat > minLat) || !(maxLng > minLng)) return 0;
+
+  const N = 40;
+
+  let hits = 0;
+
+  for (let i = 0; i < N; i++) {
+    const lat = minLat + ((i + 0.5) / N) * (maxLat - minLat);
+
+    for (let j = 0; j < N; j++) {
+      const lng = minLng + ((j + 0.5) / N) * (maxLng - minLng);
+
+      if (
+        pointInPolygon([lat, lng], ringA) &&
+        pointInPolygon([lat, lng], ringB)
+      ) {
+        hits++;
+      }
+    }
+  }
+
+  if (!hits) return 0;
+
+  const midLat = (((minLat + maxLat) / 2) * Math.PI) / 180;
+
+  const cellW = ((maxLng - minLng) / N) * 111320 * Math.cos(midLat);
+  const cellH = ((maxLat - minLat) / N) * 110540;
+
+  return hits * Math.abs(cellW) * cellH;
 }
 
 function validPoint(point) {
@@ -238,13 +344,43 @@ function cleanPoints(points) {
 // PLAYER MODELI
 // ============================================================
 
+// ============================================================
+// USERNAME
+// ============================================================
+//
+// Ism emas — username. Faqat harf, raqam, "_" va "."
+// Bitta usernameni ikki kishi ola olmaydi (katta-kichik
+// harf farq qilmaydi: "Ali" va "ali" — bitta username).
+// ============================================================
+
 function normalizeName(name) {
   return String(name || "")
-    // Teg va tirnoq belgilari ismda kerak emas (XSS'ga qarshi qo'sh himoya)
-    .replace(/[<>"'`\\]/g, "")
-    .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 20);
+    .replace(/^@+/, "")
+    // Bo'sh joy o'rniga pastki chiziq
+    .replace(/\s+/g, "_")
+    // Faqat xavfsiz belgilar qoladi (XSS'ga qarshi qo'sh himoya)
+    .replace(/[^A-Za-z0-9._]/g, "")
+    .replace(/\.{2,}/g, ".")
+    .replace(/^[._]+/, "")
+    .slice(0, RULES.NAME_MAX);
+}
+
+// Username to'g'rimi? Xato bo'lsa — sababi qaytadi.
+function usernameError(raw) {
+  const clean = normalizeName(raw);
+
+  if (clean.length < RULES.NAME_MIN) {
+    return (
+      "Username kamida " + RULES.NAME_MIN + " ta belgidan iborat bo'lsin"
+    );
+  }
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9._]*$/.test(clean)) {
+    return "Username harf yoki raqam bilan boshlansin";
+  }
+
+  return "";
 }
 
 function nameKey(name) {
@@ -256,7 +392,7 @@ function createPlayer(id, name) {
 
   return {
     id: String(id),
-    name: normalizeName(name) || "Noma'lum",
+    name: normalizeName(name) || "player_" + hashId(id).toString(36).slice(0, 5),
     color: playerColor(id),
     location: null,
     area: 0,
@@ -269,11 +405,14 @@ function createPlayer(id, name) {
 
 function normalizePlayer(player, id) {
   if (!player || typeof player !== "object") {
-    return createPlayer(id, "Noma'lum");
+    return createPlayer(id, "");
   }
 
   player.id = String(player.id || id);
-  player.name = normalizeName(player.name) || "Noma'lum";
+
+  player.name =
+    normalizeName(player.name) ||
+    "player_" + hashId(player.id).toString(36).slice(0, 5);
 
   // Rang har doim ID'dan hisoblanadi — hech kimda qizil qotib qolmaydi
   player.color = playerColor(player.id);
@@ -536,6 +675,7 @@ module.exports = {
   normalizePlayer,
   rebuildArea,
   normalizeName,
+  usernameError,
   nameKey,
   isNameTaken,
   playerColor,
@@ -546,6 +686,8 @@ module.exports = {
   polygonArea,
   pointInPolygon,
   coverageRatio,
+  overlapArea,
+  simplifyPoints,
   centroid,
   cleanPoints,
   validPoint,

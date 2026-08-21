@@ -23,6 +23,7 @@ const {
   perimeterMeters,
   distanceMeters,
   coverageRatio,
+  overlapArea,
   RULES
 } = require("./_store");
 
@@ -141,7 +142,7 @@ module.exports = async function handler(req, res) {
       if (isNameTaken(players, name, id)) {
         return json(res, 409, {
           error: "name_taken",
-          message: "Bu ism band. Boshqa ism tanlang."
+          message: "Bu username band. Boshqasini tanlang."
         });
       }
 
@@ -150,11 +151,12 @@ module.exports = async function handler(req, res) {
     }
 
     // ---------------------------------------------------------
-    // BOSIB OLISH
+    // TO'LIQ BOSIB OLISH
     // ---------------------------------------------------------
     //
     // Yangi hudud eski hududning yarmidan ko'pini qoplasa —
-    // o'sha hudud egasidan olinadi.
+    // o'sha hudud butunlay egasidan olinadi. Atrofidan aylanib
+    // o'tilsa (ichiga olinsa) qamrov 1 ga teng bo'ladi.
     //
     // O'zining eski hududi ham shu qoida bilan almashtiriladi
     // (bir joyni ikki marta aylanib maydonni ikkilantirib
@@ -186,7 +188,6 @@ module.exports = async function handler(req, res) {
             });
           }
 
-          changed.set(String(other.id), other);
           return; // hududni tashlab yuboramiz — bosib olindi
         }
 
@@ -196,6 +197,67 @@ module.exports = async function handler(req, res) {
       if (kept.length !== other.territories.length) {
         other.territories = kept;
         rebuildArea(other);
+        changed.set(String(other.id), other);
+      }
+    });
+
+    // ---------------------------------------------------------
+    // QISMAN BOSIB OLISH
+    // ---------------------------------------------------------
+    //
+    // Yangi aylana eski hududning bir qismini qamrab olgan
+    // bo'lsa (to'liq bosib olishga yetmasa ham), o'sha qism
+    // eski egasidan olinadi va yangi egaga o'tadi.
+    //
+    // Shu tufayli bir joy hech qachon ikki marta sanalmaydi va
+    // "birovning yeridan yursang — o'sha joy senga o'tadi"
+    // qoidasi ishlaydi.
+    // ---------------------------------------------------------
+
+    Object.values(players).forEach((other) => {
+      if (!Array.isArray(other.territories) || !other.territories.length) {
+        return;
+      }
+
+      const kept = [];
+
+      let touched = false;
+
+      other.territories.forEach((territory) => {
+        const shared = overlapArea(points, territory.points);
+
+        if (shared < 1) {
+          kept.push(territory);
+          return;
+        }
+
+        const left = Math.round((Number(territory.area) || 0) - shared);
+
+        touched = true;
+
+        // Deyarli hech nima qolmadi — hudud butunlay qo'ldan ketdi
+        if (left < RULES.MIN_AREA) {
+          if (String(other.id) !== String(player.id)) {
+            captured.push({
+              territoryId: territory.id || null,
+              ownerId: other.id,
+              ownerName: other.name,
+              area: Number(territory.area) || 0
+            });
+          }
+
+          return;
+        }
+
+        territory.area = left;
+
+        kept.push(territory);
+      });
+
+      if (touched) {
+        other.territories = kept;
+        rebuildArea(other);
+        changed.set(String(other.id), other);
       }
     });
 

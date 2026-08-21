@@ -15,15 +15,24 @@ ishlaydi.
 
 ## Qoidalar
 
-1. Ism **faqat bir marta** so'raladi. Qurilma ID `localStorage` va cookie'da
-   saqlanadi, shuning uchun bitta telefon = bitta akkaunt.
-2. Bitta ismni ikki kishi ololmaydi (server 409 `name_taken` qaytaradi).
+1. **Username** faqat bir marta so'raladi (ism emas). Faqat harf, raqam,
+   `_` va `.` — 3 tadan 16 tagacha belgi. Qurilma ID `localStorage` va
+   cookie'da saqlanadi, shuning uchun bitta telefon = bitta akkaunt.
+2. Bitta usernameni ikki kishi ololmaydi (server 409 `name_taken` qaytaradi).
+   Katta-kichik harf farq qilmaydi: `Ali` va `ali` — bitta username.
 3. Har kimning rangi qurilma ID'sidan hisoblanadi — hamma har xil rangda.
 4. Yurishni boshlab, boshlagan nuqtangizga qaytsangiz hudud yopiladi.
+   Yopilgan hudud xaritada **qoladi** — u yerning egasi siz bo'lasiz.
+   Internet uzilsa ham hudud telefonda saqlanib turadi va aloqa tiklanganda
+   o'zi serverga yuboriladi.
 5. Hududlar serverda saqlanadi — chiqib qayta kirsangiz ham joyida qoladi.
-6. Boshqa odamning hududini aylanib o'tsangiz — **bosib olasiz**
-   (hududning yarmidan ko'pi ichida qolsa, u sizga o'tadi).
-7. **Tezlik cheklovi:** o'rtacha 10 km/soatdan tez bo'lsa hudud yozilmaydi.
+6. Boshqa odamning hududini aylanib o'tsangiz — **bosib olasiz**:
+   - hududning yarmidan ko'pi (yoki butunlay) ichida qolsa, u sizga o'tadi;
+   - qisman ustidan yursangiz, faqat siz yurib o'tgan qism sizga o'tadi va
+     eski egasining maydonidan chiqariladi (bir joy ikki marta sanalmaydi);
+   - yeringizni qaytarib olish uchun o'sha joydan qayta aylaning.
+7. Reytingda eng katta maydonga ega odam birinchi turadi.
+8. **Tezlik cheklovi:** o'rtacha 10 km/soatdan tez bo'lsa hudud yozilmaydi.
    Bir lahzalik tezlik 12 km/soatdan oshsa — nuqtalar yozilmaydi va
    ogohlantirish chiqadi. Mashina, velosiped, samokatda hudud egallab
    bo'lmaydi; piyoda yurganda esa hudud egallanaveradi.

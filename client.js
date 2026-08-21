@@ -3,12 +3,14 @@
 // ZONEX — brauzer qismi
 // ============================================================
 //
-//  - Ism faqat BIR MARTA so'raladi
+//  - Username faqat BIR MARTA so'raladi (bittasini ikki kishi
+//    ola olmaydi)
 //  - Bitta qurilma = bitta akkaunt
-//  - Odamlar bir-birini jonli ko'radi
-//  - Har kimning rangi qurilma ID'sidan (hech kimda bir xil emas)
-//  - Hududlar serverda saqlanadi, chiqib kirsangiz ham qolaveradi
-//  - Begona hududni bosib olish mumkin
+//  - Odamlar bir-birini jonli ko'radi va xarita yangilanganda
+//    yo'qolib qolmaydi
+//  - Yurib yopilgan hudud xaritada QOLADI — u yerning egasi
+//    o'sha odam bo'ladi
+//  - Begona hududdan aylanib o'tsang — o'sha yer senga o'tadi
 //  - Mashina / velosiped / samokat tezligida hudud yozilmaydi
 // ============================================================
 
@@ -46,8 +48,22 @@ const CONFIG = {
   POLL_MS: 3000,
 
   // Odam onlayn hisoblanadigan vaqt (ms)
-  ONLINE_MS: 120000
+  ONLINE_MS: 120000,
+
+  // Xarita eng ko'p yaqinlashish darajasi.
+  // OSM plitkalari 19 gacha bor: undan keyin plitka cho'ziladi,
+  // shuning uchun xarita OQARIB qolmaydi.
+  MAX_ZOOM: 21,
+  TILE_ZOOM: 19,
+
+  // Server hali tasdiqlamagan hududni shuncha vaqt lokal
+  // saqlab turamiz (ms) — 12 soat
+  PENDING_TTL: 12 * 60 * 60 * 1000
 };
+
+// Username qoidasi
+const NAME_MIN = 3;
+const NAME_MAX = 16;
 
 // ============================================================
 // QURILMA ID — bitta qurilma, bitta akkaunt
@@ -95,6 +111,24 @@ function saveStored(key, value) {
   writeCookie(key, value);
 }
 
+// Katta ma'lumot (hudud nuqtalari) — faqat localStorage'ga.
+// Cookie'ning hajmi kichik, u yerga sig'maydi.
+function loadBig(key) {
+  try {
+    return localStorage.getItem(key) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveBig(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* joy yetmadi */
+  }
+}
+
 function deviceId() {
   let id = loadStored("zonexId");
 
@@ -117,7 +151,7 @@ function deviceId() {
 const state = {
   id: deviceId(),
   name: loadStored("zonexName"),
-  color: loadStored("zonexColor") || "#1246d8",
+  color: loadStored("zonexColor") || "",
 
   map: null,
   marker: null,
@@ -137,14 +171,19 @@ const state = {
   tooFast: false,
   line: null,
   preview: null,
+  timer: null,
 
   // dunyo
   players: [],
-  zoneLayers: [],
-  zoneKey: "",
+  playerMap: new Map(),
+  zoneLayers: new Map(),
   markers: new Map(),
   worldTimer: null,
-  liveOpen: false
+  liveOpen: false,
+
+  // server hali tasdiqlamagan (yoki yubarilmagan) hududlarim
+  pending: [],
+  sending: false
 };
 
 // ============================================================
@@ -235,21 +274,76 @@ function colorFromId(id) {
 }
 
 function applyColor(color) {
-  const next = color || colorFromId(state.id);
-
-  if (next === state.color && $("#profileBtn")?.style.background) return;
+  const next = color || state.color || colorFromId(state.id);
 
   state.color = next;
 
-  saveStored("zonexColor", state.color);
+  saveStored("zonexColor", next);
 
   const avatar = $("#profileBtn");
 
-  if (avatar) avatar.style.background = state.color;
+  if (avatar) avatar.style.background = next;
 
   if (state.marker) {
-    state.marker.setStyle({ fillColor: state.color });
+    state.marker.setStyle({ fillColor: next });
   }
+}
+
+// ============================================================
+// USERNAME
+// ============================================================
+
+function cleanUsername(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/\s+/g, "_")
+    .replace(/[^A-Za-z0-9._]/g, "")
+    .replace(/\.{2,}/g, ".")
+    .replace(/^[._]+/, "")
+    .slice(0, NAME_MAX);
+}
+
+function usernameProblem(value) {
+  const clean = cleanUsername(value);
+
+  if (clean.length < NAME_MIN) {
+    return "Username kamida " + NAME_MIN + " ta belgidan iborat bo'lsin";
+  }
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9._]*$/.test(clean)) {
+    return "Username harf yoki raqam bilan boshlansin";
+  }
+
+  return "";
+}
+
+// ============================================================
+// LOKAL HUDUDLAR (server tasdiqlagunicha yo'qolmaydi)
+// ============================================================
+
+function loadPending() {
+  try {
+    const list = JSON.parse(loadBig("zonexMine") || "[]");
+
+    if (!Array.isArray(list)) return [];
+
+    const now = Date.now();
+
+    return list.filter(
+      (t) =>
+        t &&
+        Array.isArray(t.points) &&
+        t.points.length >= 3 &&
+        now - Number(t.createdAt || 0) < CONFIG.PENDING_TTL
+    );
+  } catch {
+    return [];
+  }
+}
+
+function savePending() {
+  saveBig("zonexMine", JSON.stringify(state.pending.slice(-40)));
 }
 
 // ============================================================
@@ -261,25 +355,18 @@ function initMap(center) {
 
   state.map = L.map("map", {
     zoomControl: false,
-    attributionControl: true
+    attributionControl: true,
+    maxZoom: CONFIG.MAX_ZOOM
   }).setView(center || [41.3111, 69.2797], 16);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 20,
+    // maxNativeZoom — plitkalar shu darajagacha mavjud.
+    // Undan yaqinroq kelinsa, plitka cho'ziladi (oqarib qolmaydi).
+    maxZoom: CONFIG.MAX_ZOOM,
+    maxNativeZoom: CONFIG.TILE_ZOOM,
+    keepBuffer: 4,
     attribution: "© OpenStreetMap"
   }).addTo(state.map);
-}
-
-function clearZones() {
-  state.zoneLayers.forEach((layer) => {
-    try {
-      layer.remove();
-    } catch {
-      /* xarita yopilgan bo'lishi mumkin */
-    }
-  });
-
-  state.zoneLayers = [];
 }
 
 // ============================================================
@@ -295,7 +382,7 @@ function playerIcon(player) {
       '<span class="zx-dot" style="background:' +
       esc(player.color || colorFromId(player.id)) +
       '"></span>' +
-      '<span class="zx-name">' +
+      '<span class="zx-name">@' +
       esc(player.name) +
       "</span>" +
       "</div>",
@@ -317,55 +404,95 @@ function playerMarker(player) {
   }).addTo(state.map);
 }
 
-// Hududlar faqat o'zgarganda qayta chiziladi (miltillamasligi uchun)
-function zoneSignature(players) {
-  return players
-    .map(
-      (p) =>
-        p.id +
-        ":" +
-        p.name +
-        ":" +
-        (p.territories || []).map((t) => t.id).join(",")
-    )
-    .join("|");
+// ------------------------------------------------------------
+// HUDUDLAR
+// ------------------------------------------------------------
+//
+// Har bir hudud xaritaga BIR MARTA qo'yiladi va o'chirilmaydi.
+// Faqat haqiqatan yo'qolganlari (bosib olinganlari) olib
+// tashlanadi — shuning uchun har 3 sekundda miltillamaydi va
+// yopilgan hudud yo'qolib qolmaydi.
+// ------------------------------------------------------------
+
+function zoneStamp(territory, player, isMe) {
+  return (
+    String(territory.points.length) +
+    ":" +
+    player.name +
+    ":" +
+    (player.color || "") +
+    ":" +
+    (isMe ? "1" : "0")
+  );
 }
 
-function renderZones() {
-  clearZones();
+function drawZone(key, territory, player, isMe) {
+  const color = player.color || colorFromId(player.id);
 
-  state.players.forEach((player) => {
-    const color = player.color || colorFromId(player.id);
+  const polygon = L.polygon(territory.points, {
+    color,
+    fillColor: color,
+    fillOpacity: isMe ? 0.32 : 0.2,
+    weight: isMe ? 3 : 2
+  }).addTo(state.map);
 
+  polygon.bindTooltip(
+    '<span style="color:' + esc(color) + '">@' + esc(player.name) + "</span>",
+    {
+      permanent: true,
+      direction: "center",
+      className: "owner-label"
+    }
+  );
+
+  state.zoneLayers.set(key, {
+    layer: polygon,
+    stamp: zoneStamp(territory, player, isMe)
+  });
+}
+
+function renderZones(list) {
+  const alive = new Set();
+
+  list.forEach((entry) => {
+    const player = entry.player;
     const isMe = String(player.id) === String(state.id);
 
-    (player.territories || []).forEach((territory) => {
+    entry.territories.forEach((territory) => {
       if (!Array.isArray(territory.points) || territory.points.length < 3) {
         return;
       }
 
-      const polygon = L.polygon(territory.points, {
-        color,
-        fillColor: color,
-        fillOpacity: isMe ? 0.32 : 0.2,
-        weight: isMe ? 3 : 2
-      }).addTo(state.map);
+      const key = String(player.id) + "|" + String(territory.id || "");
 
-      polygon.bindTooltip(
-        '<span style="color:' +
-          esc(color) +
-          '">' +
-          esc(player.name) +
-          "</span>",
-        {
-          permanent: true,
-          direction: "center",
-          className: "owner-label"
-        }
-      );
+      alive.add(key);
 
-      state.zoneLayers.push(polygon);
+      const existing = state.zoneLayers.get(key);
+      const stamp = zoneStamp(territory, player, isMe);
+
+      if (existing) {
+        // Faqat rang / egasi o'zgargan bo'lsa qayta chizamiz
+        if (existing.stamp === stamp) return;
+
+        existing.layer.remove();
+        state.zoneLayers.delete(key);
+      }
+
+      drawZone(key, territory, player, isMe);
     });
+  });
+
+  // Bosib olingan (endi yo'q) hududlarni olib tashlaymiz
+  state.zoneLayers.forEach((value, key) => {
+    if (alive.has(key)) return;
+
+    try {
+      value.layer.remove();
+    } catch {
+      /* allaqachon olib tashlangan */
+    }
+
+    state.zoneLayers.delete(key);
   });
 }
 
@@ -392,14 +519,20 @@ function renderMarkers() {
       Number(player.location.lng)
     ];
 
+    if (!Number.isFinite(position[0]) || !Number.isFinite(position[1])) {
+      alive.delete(id);
+      return;
+    }
+
     const existing = state.markers.get(id);
 
     if (existing) {
       existing.marker.setLatLng(position);
 
-      if (existing.name !== player.name) {
+      if (existing.name !== player.name || existing.color !== player.color) {
         existing.marker.setIcon(playerIcon(player));
         existing.name = player.name;
+        existing.color = player.color;
       }
 
       return;
@@ -408,11 +541,15 @@ function renderMarkers() {
     const marker = playerMarker(player);
 
     if (marker) {
-      state.markers.set(id, { marker, name: player.name });
+      state.markers.set(id, {
+        marker,
+        name: player.name,
+        color: player.color
+      });
     }
   });
 
-  // Chiqib ketganlarni olib tashlaymiz
+  // Faqat haqiqatan chiqib ketganlarni olib tashlaymiz
   state.markers.forEach((value, id) => {
     if (alive.has(id)) return;
 
@@ -426,35 +563,118 @@ function renderMarkers() {
   });
 }
 
+// ------------------------------------------------------------
+// Serverdan kelgan ro'yxatni eskisi bilan qo'shib yuboramiz.
+//
+// Bitta so'rov kechikib, odamning joylashuvi eski bo'lib
+// kelsa ham, u xaritadan YO'QOLMAYDI.
+// ------------------------------------------------------------
+
+function mergePlayers(incoming) {
+  const next = new Map();
+
+  incoming.forEach((player) => {
+    if (!player || player.id == null) return;
+
+    const id = String(player.id);
+
+    const old = state.playerMap.get(id);
+
+    const merged = Object.assign({}, player);
+
+    merged.color = player.color || colorFromId(id);
+
+    const oldTime =
+      old && old.location ? Number(old.location.time || 0) : 0;
+
+    const newTime = player.location ? Number(player.location.time || 0) : 0;
+
+    if (oldTime > newTime) {
+      merged.location = old.location;
+    }
+
+    next.set(id, merged);
+  });
+
+  state.playerMap = next;
+
+  return Array.from(next.values());
+}
+
+// Mening hududlarim: server + hali tasdiqlanmagan lokal
+function myTerritories(me) {
+  const server = me && Array.isArray(me.territories) ? me.territories : [];
+
+  const ids = new Set(server.map((t) => String(t.id)));
+
+  const before = state.pending.length;
+
+  // Server tasdiqladi — lokal nusxa endi kerak emas
+  state.pending = state.pending.filter((t) => !ids.has(String(t.id)));
+
+  if (state.pending.length !== before) savePending();
+
+  return server.concat(state.pending);
+}
+
 function renderWorld(players) {
-  if (!state.map) return;
+  if (!state.map) initMap();
 
-  state.players = Array.isArray(players) ? players : [];
+  state.players = mergePlayers(Array.isArray(players) ? players : []);
 
-  const signature = zoneSignature(state.players);
+  let me = state.players.find((p) => String(p.id) === String(state.id));
 
-  if (signature !== state.zoneKey) {
-    state.zoneKey = signature;
-    renderZones();
+  // Server hali meni ko'rmagan bo'lsa ham o'zimni ro'yxatga qo'shamiz
+  if (!me && state.name) {
+    me = {
+      id: state.id,
+      name: state.name,
+      color: state.color || colorFromId(state.id),
+      territories: [],
+      area: 0,
+      location: null
+    };
+
+    state.players.push(me);
   }
 
+  const mine = myTerritories(me);
+
+  const list = state.players.map((player) => ({
+    player,
+
+    territories:
+      String(player.id) === String(state.id)
+        ? mine
+        : player.territories || []
+  }));
+
+  // Reyting va "mening hududim" uchun maydonni shu ro'yxatdan olamiz
+  list.forEach((entry) => {
+    entry.area = entry.territories.reduce(
+      (sum, t) => sum + (Number(t.area) || 0),
+      0
+    );
+
+    entry.player.area = entry.area;
+  });
+
+  renderZones(list);
   renderMarkers();
 
-  updateMyCard();
+  updateMyCard(me, mine);
   renderBoard();
   renderLive();
 }
 
-function myPlayer() {
-  return state.players.find((p) => String(p.id) === String(state.id));
-}
+function updateMyCard(me, mine) {
+  const territories = mine || [];
 
-function updateMyCard() {
-  const me = myPlayer();
+  const area = territories.reduce((sum, t) => sum + (Number(t.area) || 0), 0);
 
-  const area = me ? Number(me.area || 0) : Number(loadStored("zonexArea")) || 0;
-
-  const rounded = Math.round(area);
+  const rounded = Math.round(
+    area || (me ? Number(me.area || 0) : Number(loadStored("zonexArea")) || 0)
+  );
 
   if ($("#totalArea")) {
     $("#totalArea").textContent = rounded.toLocaleString();
@@ -464,12 +684,10 @@ function updateMyCard() {
     saveStored("zonexArea", String(rounded));
   }
 
-  const count = me && me.territories ? me.territories.length : 0;
-
   // Yurish paytida bu joyda hozirgi aylana ko'rsatiladi
   if ($("#areaStatus") && !state.active) {
-    $("#areaStatus").textContent = count
-      ? count + " ta hudud sizniki"
+    $("#areaStatus").textContent = territories.length
+      ? territories.length + " ta hudud sizniki"
       : "Birinchi hududingizni egallang";
   }
 
@@ -477,7 +695,7 @@ function updateMyCard() {
 
   if ($("#levelBadge")) {
     $("#levelBadge").textContent = String(
-      Math.max(1, Math.floor(area / 5000) + 1)
+      Math.max(1, Math.floor(rounded / 5000) + 1)
     );
   }
 }
@@ -506,11 +724,17 @@ async function api(url, body) {
 }
 
 async function fetchWorld() {
-  const { ok, data } = await api("/api/world?t=" + Date.now());
+  try {
+    const { ok, data } = await api("/api/world?t=" + Date.now());
 
-  if (ok && Array.isArray(data.players)) {
-    renderWorld(data.players);
+    if (ok && Array.isArray(data.players)) {
+      renderWorld(data.players);
+    }
+  } catch {
+    // Internet uzildi — xaritadagi hech narsa o'chirilmaydi
   }
+
+  flushPending();
 }
 
 function startPolling() {
@@ -528,16 +752,20 @@ async function sendLocation(point, accuracy) {
 
   state.lastSent = Date.now();
 
-  const { ok, data } = await api("/api/location", {
-    id: state.id,
-    name: state.name,
-    lat: point[0],
-    lng: point[1],
-    accuracy
-  });
+  try {
+    const { ok, data } = await api("/api/location", {
+      id: state.id,
+      name: state.name,
+      lat: point[0],
+      lng: point[1],
+      accuracy
+    });
 
-  if (ok && Array.isArray(data.players)) {
-    renderWorld(data.players);
+    if (ok && Array.isArray(data.players)) {
+      renderWorld(data.players);
+    }
+  } catch {
+    /* keyingi urinishda ketadi */
   }
 }
 
@@ -547,8 +775,7 @@ async function sendLocation(point, accuracy) {
 
 function showSpeed(kmh) {
   if ($("#speed")) {
-    $("#speed").innerHTML =
-      kmh.toFixed(1) + ' <small>km/soat</small>';
+    $("#speed").innerHTML = kmh.toFixed(1) + " <small>km/soat</small>";
   }
 }
 
@@ -582,13 +809,13 @@ function onPosition(pos) {
       radius: 9,
       color: "#ffffff",
       weight: 4,
-      fillColor: state.color,
+      fillColor: state.color || colorFromId(state.id),
       fillOpacity: 1
     }).addTo(state.map);
 
     state.accuracyRing = L.circle(point, {
       radius: accuracy,
-      color: state.color,
+      color: state.color || colorFromId(state.id),
       weight: 1,
       fillOpacity: 0.06
     }).addTo(state.map);
@@ -757,9 +984,11 @@ function walkPoint(point, accuracy) {
 }
 
 function drawTrack() {
+  const color = state.color || colorFromId(state.id);
+
   if (!state.line) {
     state.line = L.polyline(state.points, {
-      color: state.color,
+      color,
       weight: 5,
       opacity: 0.95,
       lineJoin: "round"
@@ -772,10 +1001,10 @@ function drawTrack() {
 
   if (state.points.length > 2) {
     state.preview = L.polygon(state.points, {
-      color: state.color,
+      color,
       weight: 1,
       dashArray: "5 7",
-      fillColor: state.color,
+      fillColor: color,
       fillOpacity: 0.12
     }).addTo(state.map);
   }
@@ -793,10 +1022,25 @@ function resetTrack() {
   state.preview = null;
 }
 
+function clearTrack() {
+  if (state.line) {
+    state.line.remove();
+    state.line = null;
+  }
+
+  if (state.preview) {
+    state.preview.remove();
+    state.preview = null;
+  }
+
+  state.points = [];
+  state.distance = 0;
+}
+
 function updateStats() {
   if ($("#distance")) {
     $("#distance").innerHTML =
-      (state.distance / 1000).toFixed(2) + ' <small>km</small>';
+      (state.distance / 1000).toFixed(2) + " <small>km</small>";
   }
 
   const seconds = state.active
@@ -814,8 +1058,8 @@ function updateStats() {
   if (state.active && state.points.length > 2 && $("#areaStatus")) {
     const area = Math.round(polygonArea(state.points));
 
-    $("#areaStatus").textContent = "Hozirgi aylana: ~" +
-      area.toLocaleString() + " m²";
+    $("#areaStatus").textContent =
+      "Hozirgi aylana: ~" + area.toLocaleString() + " m²";
   }
 }
 
@@ -846,6 +1090,88 @@ function startWalk() {
   toast("Yurish boshlandi — piyoda yuring!");
 }
 
+// ------------------------------------------------------------
+// Yopilgan hudud DARHOL xaritaga yoziladi va lokal saqlanadi.
+// Server javobi kechiksa yoki internet uzilsa ham u yerdan
+// yo'qolmaydi — keyin o'zi qayta yuboriladi.
+// ------------------------------------------------------------
+
+function localTerritoryId() {
+  return "local-" + Date.now().toString(36) + "-" +
+    Math.random().toString(36).slice(2, 7);
+}
+
+function addPending(entry) {
+  state.pending.push(entry);
+  savePending();
+}
+
+async function pushTerritory(entry) {
+  const { ok, status, data } = await api("/api/territory", {
+    id: state.id,
+    name: state.name,
+    points: entry.points,
+    duration: entry.duration,
+    distance: entry.distance,
+    maxSpeed: entry.maxSpeed
+  });
+
+  if (ok) {
+    // Server o'z ID'sini berdi — lokal nusxa endi shu ID bilan yuradi
+    if (data.territory) {
+      entry.id = data.territory.id;
+      entry.area = Number(data.territory.area) || entry.area;
+    }
+
+    entry.sent = true;
+
+    savePending();
+
+    return { ok: true, data };
+  }
+
+  // Server rad etdi (qoidaga to'g'ri kelmadi) — lokal nusxa o'chiriladi
+  if (status >= 400 && status < 500) {
+    state.pending = state.pending.filter((t) => t !== entry);
+    savePending();
+
+    return { ok: false, data, rejected: true };
+  }
+
+  return { ok: false, data, rejected: false };
+}
+
+// Yuborilmay qolgan hududlarni jimgina qayta yuboradi
+async function flushPending() {
+  if (state.sending || !state.name) return;
+
+  const waiting = state.pending.filter(
+    (t) => !t.sent && Number(t.tries || 0) < 12
+  );
+
+  if (!waiting.length) return;
+
+  state.sending = true;
+
+  for (const entry of waiting) {
+    entry.tries = Number(entry.tries || 0) + 1;
+
+    try {
+      const result = await pushTerritory(entry);
+
+      if (result.ok && Array.isArray(result.data.players)) {
+        renderWorld(result.data.players);
+      }
+    } catch {
+      /* internet yo'q — keyingi safar */
+    }
+  }
+
+  savePending();
+
+  state.sending = false;
+}
+
 async function finishWalk(closed) {
   if (!state.active) return;
 
@@ -867,7 +1193,7 @@ async function finishWalk(closed) {
 
   if (state.points.length < 4) {
     toast("Hudud yaratish uchun ko'proq yuring");
-    updateMyCard();
+    fetchWorld();
     return;
   }
 
@@ -875,7 +1201,7 @@ async function finishWalk(closed) {
 
   if (!closed && gap > 40) {
     toast("Hudud yopilmadi — boshlagan nuqtaga qayting");
-    updateMyCard();
+    fetchWorld();
     return;
   }
 
@@ -888,54 +1214,62 @@ async function finishWalk(closed) {
         " km/soat — hudud faqat piyoda yurganda egallanadi"
     );
 
-    resetTrack();
-    updateMyCard();
+    clearTrack();
+    fetchWorld();
     return;
   }
 
-  const { ok, data } = await api("/api/territory", {
-    id: state.id,
-    name: state.name,
-    points: state.points,
+  // ---- Hudud shu zahoti "meniki" bo'ladi ----
+  const entry = {
+    id: localTerritoryId(),
+    points: state.points.slice(),
+    area: Math.round(polygonArea(state.points)),
     duration,
     distance: Math.round(state.distance),
-    maxSpeed: Math.round(state.maxSpeed * 10) / 10
-  });
+    maxSpeed: Math.round(state.maxSpeed * 10) / 10,
+    createdAt: Date.now(),
+    sent: false,
+    tries: 1
+  };
 
-  if (!ok) {
-    toast(data.message || "Hudud saqlanmadi");
+  addPending(entry);
 
-    if (data.error === "too_fast") resetTrack();
+  clearTrack();
 
-    updateMyCard();
+  // Xaritada darhol ko'rinsin (server javobini kutmasdan)
+  renderWorld(state.players);
+
+  let result;
+
+  try {
+    result = await pushTerritory(entry);
+  } catch {
+    toast("Internet yo'q — hudud saqlanib turibdi, o'zi yuboriladi");
     return;
   }
 
-  if (state.preview) {
-    state.preview.remove();
-    state.preview = null;
+  if (!result.ok) {
+    if (result.rejected) {
+      toast(result.data.message || "Hudud saqlanmadi");
+      renderWorld(state.players);
+    } else {
+      toast("Server javob bermadi — hudud keyinroq yuboriladi");
+    }
+
+    return;
   }
 
-  if (state.line) {
-    state.line.remove();
-    state.line = null;
-  }
-
-  state.points = [];
+  const data = result.data;
 
   if (Array.isArray(data.players)) renderWorld(data.players);
 
-  const area = data.territory ? Number(data.territory.area || 0) : 0;
+  const area = data.territory ? Number(data.territory.area || 0) : entry.area;
 
   if (data.captured && data.captured.length) {
-    const names = data.captured.map((c) => c.ownerName).join(", ");
+    const names = data.captured.map((c) => "@" + c.ownerName).join(", ");
 
     toast(
-      "+" +
-        area.toLocaleString() +
-        " m² · " +
-        names +
-        " hududi bosib olindi!"
+      "+" + area.toLocaleString() + " m² · " + names + " hududi bosib olindi!"
     );
   } else {
     toast("+" + area.toLocaleString() + " m² hudud egallandi!");
@@ -943,14 +1277,14 @@ async function finishWalk(closed) {
 }
 
 // ============================================================
-// REYTING
+// REYTING — eng katta maydon birinchi
 // ============================================================
 
 function renderBoard() {
   if (!$("#leaderRows")) return;
 
   const rows = state.players
-    .slice()
+    .filter((p) => Number(p.area || 0) > 0)
     .sort((a, b) => Number(b.area || 0) - Number(a.area || 0));
 
   if (!rows.length) {
@@ -965,16 +1299,17 @@ function renderBoard() {
       const isMe = String(player.id) === String(state.id);
 
       return (
-        '<div class="leader-row"' +
-        (isMe ? ' style="font-weight:800"' : "") +
-        ">" +
+        '<div class="leader-row' +
+        (isMe ? " me" : "") +
+        (index === 0 ? " top" : "") +
+        '">' +
         "<b>" +
         (index + 1) +
         "</b>" +
         '<i style="background:' +
-        esc(player.color) +
+        esc(player.color || colorFromId(player.id)) +
         '"></i>' +
-        "<span>" +
+        "<span>@" +
         esc(player.name) +
         (isMe ? " (Siz)" : "") +
         "</span>" +
@@ -994,9 +1329,11 @@ function renderBoard() {
 function onlinePlayers() {
   const now = Date.now();
 
-  return state.players.filter(
-    (p) => p.location && now - Number(p.location.time || 0) < CONFIG.ONLINE_MS
-  );
+  return state.players
+    .filter(
+      (p) => p.location && now - Number(p.location.time || 0) < CONFIG.ONLINE_MS
+    )
+    .sort((a, b) => Number(b.area || 0) - Number(a.area || 0));
 }
 
 function renderLive() {
@@ -1028,10 +1365,10 @@ function renderLive() {
         esc(p.id) +
         '">' +
         '<i style="background:' +
-        esc(p.color) +
+        esc(p.color || colorFromId(p.id)) +
         '"></i>' +
         '<span class="live-player-info">' +
-        "<strong>" +
+        "<strong>@" +
         esc(p.name) +
         (isMe ? " (Siz)" : "") +
         "</strong>" +
@@ -1078,12 +1415,12 @@ function bindLive() {
     state.liveOpen = false;
     $("#livePanel")?.classList.remove("open");
 
-    toast(person.name + " joylashuvi");
+    toast("@" + person.name + " joylashuvi");
   });
 }
 
 // ============================================================
-// ISM — FAQAT BIR MARTA
+// USERNAME — FAQAT BIR MARTA
 // ============================================================
 
 function showNameError(message) {
@@ -1099,27 +1436,36 @@ async function submitName() {
   const button = $("#continueBtn");
   const input = $("#nameInput");
 
-  const name = String(input?.value || "").trim();
+  const name = cleanUsername(input?.value);
 
-  if (name.length < 2) {
-    showNameError("Ism kamida 2 ta harf bo'lsin");
+  const problem = usernameProblem(name);
+
+  if (problem) {
+    showNameError(problem);
     input?.focus();
     return;
   }
 
   if (button) button.disabled = true;
 
-  const { ok, status, data } = await api("/api/register", {
-    id: state.id,
-    name
-  });
+  let response;
+
+  try {
+    response = await api("/api/register", { id: state.id, name });
+  } catch {
+    if (button) button.disabled = false;
+    showNameError("Server bilan aloqa yo'q — internetni tekshiring");
+    return;
+  }
 
   if (button) button.disabled = false;
+
+  const { ok, status, data } = response;
 
   if (!ok) {
     showNameError(
       status === 409
-        ? "Bu ism band. Boshqa ism tanlang."
+        ? "Bu username band. Boshqasini tanlang."
         : data.message || "Server bilan aloqa yo'q"
     );
 
@@ -1147,16 +1493,21 @@ function setAvatar() {
   if ($("#avatarLetter")) {
     $("#avatarLetter").textContent = state.name
       ? state.name[0].toUpperCase()
-      : "?";
+      : "Z";
   }
 }
 
-// Eski akkauntni server bilan moslash (ism qayta so'ralmaydi)
+// Eski akkauntni server bilan moslash (username qayta so'ralmaydi)
 async function syncAccount() {
-  const { ok, status, data } = await api("/api/register", {
-    id: state.id,
-    name: state.name
-  });
+  let response;
+
+  try {
+    response = await api("/api/register", { id: state.id, name: state.name });
+  } catch {
+    return true; // internet yo'q — o'yin lokal davom etadi
+  }
+
+  const { ok, status, data } = response;
 
   if (ok && data.player) {
     state.name = data.player.name || state.name;
@@ -1169,9 +1520,9 @@ async function syncAccount() {
     return true;
   }
 
-  // Ism band bo'lib qolgan bo'lsa — bir marta qayta so'raymiz
+  // Username band bo'lib qolgan bo'lsa — bir marta qayta so'raymiz
   if (status === 409) {
-    showNameError("Bu ism band. Boshqa ism tanlang.");
+    showNameError("Bu username band. Boshqasini tanlang.");
     $("#welcomeModal")?.classList.add("active");
 
     return false;
@@ -1191,7 +1542,11 @@ function bindButtons() {
     if (event.key === "Enter") submitName();
   });
 
-  $("#nameInput")?.addEventListener("input", () => {
+  $("#nameInput")?.addEventListener("input", (event) => {
+    const clean = cleanUsername(event.target.value);
+
+    if (event.target.value !== clean) event.target.value = clean;
+
     $("#nameError")?.classList.remove("show");
   });
 
@@ -1215,6 +1570,7 @@ function bindButtons() {
 
   $("#rankBtn")?.addEventListener("click", () => {
     $("#leaderboard")?.classList.toggle("open");
+    renderBoard();
   });
 
   $("#closeBoard")?.addEventListener("click", () => {
@@ -1233,9 +1589,13 @@ async function boot() {
 
   initMap();
 
+  state.pending = loadPending();
+
   applyColor(state.color || colorFromId(state.id));
   setAvatar();
-  updateMyCard();
+
+  // Saqlangan hududlarim darhol ko'rinsin
+  renderWorld([]);
 
   if (!state.name) {
     // Faqat birinchi kirishda
@@ -1243,7 +1603,7 @@ async function boot() {
     return;
   }
 
-  // Ism bor — hech narsa so'ramaymiz
+  // Username bor — hech narsa so'ramaymiz
   const okAccount = await syncAccount();
 
   startPolling();

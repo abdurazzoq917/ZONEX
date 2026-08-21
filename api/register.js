@@ -17,6 +17,7 @@ const {
   writePlayers,
   createPlayer,
   normalizeName,
+  usernameError,
   isNameTaken
 } = require("./_store");
 
@@ -57,17 +58,19 @@ module.exports = async function handler(req, res) {
     // Yangi akkaunt
     // ---------------------------------------------------------
 
-    if (!name || name.length < 2) {
+    const problem = usernameError(body.name);
+
+    if (problem) {
       return json(res, 400, {
         error: "invalid_name",
-        message: "Ism kamida 2 ta harf bo'lsin"
+        message: problem
       });
     }
 
     if (isNameTaken(players, name, id)) {
       return json(res, 409, {
         error: "name_taken",
-        message: "Bu ism band. Boshqa ism tanlang."
+        message: "Bu username band. Boshqasini tanlang."
       });
     }
 
