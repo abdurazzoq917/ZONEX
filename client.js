@@ -196,6 +196,30 @@ const state = {
   // ochiq profil (boshqa odamniki ham bo'lishi mumkin)
   profileId: "",
 
+  // eng katta hududga ega odam — uning nomi ustida toj turadi
+  kingId: "",
+
+  // profil rasmlari keshi: id -> { v, src }
+  avatars: new Map(),
+  avatarLoading: new Set(),
+  avatarBusy: false,
+
+  // 18+ tekshiruv modeli (faqat kerak bo'lganda yuklanadi)
+  nsfwModel: null,
+  nsfwLoading: null,
+
+  // suhbat
+  chatWith: "",
+  chatTimer: null,
+  chatMessages: [],
+
+  // qidiruv
+  searchOpen: false,
+  searchText: "",
+
+  // admin maxfiy so'zi (server ADMIN_KEY talab qilsa)
+  adminKey: loadStored("zonexAdminKey"),
+
   // server hali tasdiqlamagan (yoki yubarilmagan) hududlarim
   pending: [],
   sending: false
@@ -485,9 +509,9 @@ function playerIcon(player) {
 
     html:
       '<div class="zx-player">' +
-      '<span class="zx-dot" style="background:' +
-      esc(player.color || colorFromId(player.id)) +
-      '"></span>' +
+      // Toj nomning USTIDA turadi
+      (isKing(player) ? '<b class="zx-crown">👑</b>' : "") +
+      avatarHtml(player, "zx-face") +
       '<span class="zx-name">' +
       nameHtml(player) +
       "</span>" +
@@ -616,6 +640,41 @@ function renderZones(list) {
 }
 
 // Odamlar markeri joyida siljitiladi, qayta yaratilmaydi
+// Marker qachon qayta chizilishi kerakligini bildiruvchi belgi
+function markerStamp(player) {
+  return (
+    String(player.name) +
+    "|" +
+    String(player.color || "") +
+    "|" +
+    String(player.avatarAt || 0) +
+    "|" +
+    (avatarOf(player) ? "1" : "0") +
+    "|" +
+    (isKing(player) ? "k" : "-")
+  );
+}
+
+// Rasm yoki toj o'zgarganda markerlarni yangilaymiz
+function refreshMarkerIcons() {
+  state.markers.forEach((value, id) => {
+    const player = state.playerMap.get(String(id));
+
+    if (!player) return;
+
+    const stamp = markerStamp(player);
+
+    if (value.stamp === stamp) return;
+
+    try {
+      value.marker.setIcon(playerIcon(player));
+      value.stamp = stamp;
+    } catch {
+      /* marker olib tashlangan */
+    }
+  });
+}
+
 function renderMarkers() {
   const now = Date.now();
 
@@ -645,13 +704,15 @@ function renderMarkers() {
 
     const existing = state.markers.get(id);
 
+    const stamp = markerStamp(player);
+
     if (existing) {
       existing.marker.setLatLng(position);
 
-      if (existing.name !== player.name || existing.color !== player.color) {
+      // Ism, rang, rasm yoki toj o'zgargandagina qayta chizamiz
+      if (existing.stamp !== stamp) {
         existing.marker.setIcon(playerIcon(player));
-        existing.name = player.name;
-        existing.color = player.color;
+        existing.stamp = stamp;
       }
 
       return;
@@ -660,11 +721,7 @@ function renderMarkers() {
     const marker = playerMarker(player);
 
     if (marker) {
-      state.markers.set(id, {
-        marker,
-        name: player.name,
-        color: player.color
-      });
+      state.markers.set(id, { marker, stamp });
     }
   });
 
@@ -796,6 +853,9 @@ function renderWorld(players) {
     entry.player.area = entry.area;
   });
 
+  // Toj kimda — shu yerda aniqlanadi
+  updateKing();
+
   renderZones(list);
   renderMarkers();
 
@@ -803,6 +863,7 @@ function renderWorld(players) {
   renderBoard();
   renderLive();
   refreshProfile();
+  renderSearch();
 }
 
 function updateMyCard(me, mine) {
@@ -830,6 +891,8 @@ function updateMyCard(me, mine) {
   }
 
   if (me && me.color) applyColor(me.color);
+
+  setAvatar();
 
   if ($("#levelBadge")) {
     $("#levelBadge").textContent = String(
@@ -863,7 +926,10 @@ async function api(url, body) {
 
 async function fetchWorld() {
   try {
-    const { ok, data } = await api("/api/world?t=" + Date.now());
+    // ?id= — o'zimga kelgan do'stlik so'rovlari ham qaytadi
+    const { ok, data } = await api(
+      "/api/world?t=" + Date.now() + "&id=" + encodeURIComponent(state.id)
+    );
 
     if (ok) applyWorld(data);
   } catch {
@@ -1570,10 +1636,9 @@ function renderBoard() {
         '<b class="rank">' +
         badge +
         "</b>" +
-        '<i style="background:' +
-        esc(player.color || colorFromId(player.id)) +
-        '"></i>' +
+        avatarHtml(player, "sm") +
         "<span>" +
+        crownHtml(player) +
         nameHtml(player, isMe ? " (Siz)" : "") +
         "</span>" +
         "<strong>" +
@@ -1583,6 +1648,446 @@ function renderBoard() {
       );
     })
     .join("");
+}
+
+// ============================================================
+// PROFIL RASMI
+// ============================================================
+//
+// Rasm katta bo'lgani uchun /api/world unga tegmaydi: u yerda
+// faqat `avatarAt` (versiya) yuradi. Rasmning o'zi shu yerdan
+// bir marta olinadi va keshda saqlanadi.
+// ============================================================
+
+function avatarOf(player) {
+  if (!player || !player.id) return "";
+
+  const id = String(player.id);
+
+  const version = Number(player.avatarAt || 0);
+
+  const cached = state.avatars.get(id);
+
+  if (cached && cached.v === version) return cached.src;
+
+  // Rasm yo'q — keshni tozalaymiz
+  if (!version || player.hasAvatar === false) {
+    if (cached) state.avatars.delete(id);
+
+    return "";
+  }
+
+  loadAvatar(id, version);
+
+  return cached ? cached.src : "";
+}
+
+async function loadAvatar(id, version) {
+  const mark = id + ":" + version;
+
+  if (state.avatarLoading.has(mark)) return;
+
+  state.avatarLoading.add(mark);
+
+  try {
+    const { ok, data } = await api(
+      "/api/avatar?id=" + encodeURIComponent(id) + "&v=" + version
+    );
+
+    if (ok && data.avatar) {
+      state.avatars.set(id, { v: Number(data.avatarAt) || version, src: data.avatar });
+
+      // Rasm kelgach ro'yxatlar qayta chizilsin
+      renderBoard();
+      renderLive();
+      refreshProfile();
+      refreshMarkerIcons();
+    }
+  } catch {
+    /* keyingi safar */
+  }
+
+  state.avatarLoading.delete(mark);
+}
+
+function initials(player) {
+  const name = String((player && player.name) || "Z");
+
+  return name[0].toUpperCase();
+}
+
+// Dumaloq rasm yoki harf
+function avatarHtml(player, extraClass) {
+  const src = avatarOf(player);
+
+  const cls = "zx-av" + (extraClass ? " " + extraClass : "");
+
+  if (src) {
+    return (
+      '<span class="' +
+      cls +
+      '" style="background-image:url(&quot;' +
+      esc(src) +
+      '&quot;)"></span>'
+    );
+  }
+
+  return (
+    '<span class="' +
+    cls +
+    ' letter" style="background:' +
+    esc((player && player.color) || colorFromId(player && player.id)) +
+    '">' +
+    esc(initials(player)) +
+    "</span>"
+  );
+}
+
+// ============================================================
+// TOJ — eng katta hududga ega odam
+// ============================================================
+
+function isKing(player) {
+  return Boolean(
+    player && state.kingId && String(player.id) === String(state.kingId)
+  );
+}
+
+function crownHtml(player) {
+  return isKing(player) ? '<b class="crown" title="Eng katta hudud">👑</b>' : "";
+}
+
+function updateKing() {
+  let best = null;
+
+  state.players.forEach((player) => {
+    if (!player || !player.name) return;
+
+    if (Number(player.area || 0) <= 0) return;
+
+    if (!best || Number(player.area || 0) > Number(best.area || 0)) {
+      best = player;
+    }
+  });
+
+  const next = best ? String(best.id) : "";
+
+  if (next === state.kingId) return false;
+
+  state.kingId = next;
+
+  return true;
+}
+
+// ============================================================
+// 18+ RASM TEKSHIRUVI
+// ============================================================
+//
+// MUHIM: bu tekshiruv BRAUZERDA ishlaydi va 100% aniq emas.
+//
+//   1) Asosiy usul — nsfwjs modeli (internetdan bir marta
+//      yuklanadi). Ishonch yuqori bo'lsa: rasm qo'yilmaydi va
+//      odamga 3 kunlik ban yoziladi.
+//
+//   2) Model yuklanmasa — teri rangi ulushi bo'yicha juda
+//      ehtiyotkor zaxira tekshiruv ishlaydi. Bunda ban
+//      berilmaydi, faqat rasm qabul qilinmaydi (selfi'ni
+//      xato banlab qo'ymaslik uchun).
+//
+// Admin har doim bandan chiqarib yuborishi mumkin.
+// ============================================================
+
+const NSFW = {
+  // Model javobiga ishonch chegaralari
+  PORN: 0.6,
+  HENTAI: 0.6,
+  SEXY: 0.85,
+
+  // Zaxira usul: teri rangi ulushi
+  SKIN: 0.8
+};
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const tag = document.createElement("script");
+
+    tag.src = src;
+    tag.async = true;
+    tag.onload = resolve;
+    tag.onerror = () => reject(new Error("yuklanmadi: " + src));
+
+    document.head.appendChild(tag);
+  });
+}
+
+async function nsfwModel() {
+  if (state.nsfwModel) return state.nsfwModel;
+
+  if (state.nsfwLoading) return state.nsfwLoading;
+
+  state.nsfwLoading = (async () => {
+    if (!window.tf) {
+      await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs");
+    }
+
+    if (!window.nsfwjs) {
+      await loadScript("https://cdn.jsdelivr.net/npm/nsfwjs");
+    }
+
+    if (!window.nsfwjs || !window.nsfwjs.load) {
+      throw new Error("nsfwjs yuklanmadi");
+    }
+
+    state.nsfwModel = await window.nsfwjs.load();
+
+    return state.nsfwModel;
+  })();
+
+  try {
+    return await state.nsfwLoading;
+  } finally {
+    state.nsfwLoading = null;
+  }
+}
+
+// Zaxira usul: teri rangidagi piksellar ulushi
+function skinRatio(canvas) {
+  const ctx = canvas.getContext("2d");
+
+  let pixels;
+
+  try {
+    pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  } catch {
+    return 0;
+  }
+
+  let skin = 0;
+  let total = 0;
+
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i];
+    const g = pixels[i + 1];
+    const b = pixels[i + 2];
+    const alpha = pixels[i + 3];
+
+    if (alpha < 128) continue;
+
+    total++;
+
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+
+    const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+    const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+
+    const looksSkin =
+      r > 95 &&
+      g > 40 &&
+      b > 20 &&
+      max - min > 15 &&
+      Math.abs(r - g) > 15 &&
+      r > g &&
+      r > b &&
+      cb >= 77 &&
+      cb <= 127 &&
+      cr >= 133 &&
+      cr <= 173;
+
+    if (looksSkin) skin++;
+  }
+
+  return total ? skin / total : 0;
+}
+
+// { nsfw, score, checked } — checked=false bo'lsa model yuklanmagan
+async function checkImage(image, canvas) {
+  try {
+    const model = await nsfwModel();
+
+    const list = await model.classify(image);
+
+    const score = {};
+
+    list.forEach((row) => {
+      score[String(row.className).toLowerCase()] = Number(row.probability) || 0;
+    });
+
+    const porn = score.porn || 0;
+    const hentai = score.hentai || 0;
+    const sexy = score.sexy || 0;
+
+    const nsfw =
+      porn >= NSFW.PORN || hentai >= NSFW.HENTAI || sexy >= NSFW.SEXY;
+
+    return {
+      nsfw,
+      checked: true,
+      score: Math.round(Math.max(porn, hentai, sexy) * 100) / 100
+    };
+  } catch {
+    // Model yuklanmadi — ehtiyotkor zaxira tekshiruv
+    const ratio = skinRatio(canvas);
+
+    return {
+      nsfw: ratio >= NSFW.SKIN,
+      checked: false,
+      score: Math.round(ratio * 100) / 100
+    };
+  }
+}
+
+// ------------------------------------------------------------
+// RASMNI TANLASH VA YUBORISH
+// ------------------------------------------------------------
+
+function readImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const image = new Image();
+
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Rasm ochilmadi"));
+      image.src = String(reader.result);
+    };
+
+    reader.onerror = () => reject(new Error("Fayl o'qilmadi"));
+
+    reader.readAsDataURL(file);
+  });
+}
+
+// Kvadrat qilib kichraytiramiz — server va tarmoq uchun yengil
+function squareCanvas(image, size) {
+  const canvas = document.createElement("canvas");
+
+  canvas.width = size;
+  canvas.height = size;
+
+  const ctx = canvas.getContext("2d");
+
+  const side = Math.min(image.naturalWidth, image.naturalHeight);
+
+  ctx.drawImage(
+    image,
+    (image.naturalWidth - side) / 2,
+    (image.naturalHeight - side) / 2,
+    side,
+    side,
+    0,
+    0,
+    size,
+    size
+  );
+
+  return canvas;
+}
+
+async function uploadAvatar(file) {
+  if (!file || state.avatarBusy) return;
+
+  if (!state.name) {
+    toast("Avval username tanlang");
+    return;
+  }
+
+  if (!/^image\//.test(file.type)) {
+    toast("Faqat rasm fayli tanlang");
+    return;
+  }
+
+  if (file.size > 8 * 1024 * 1024) {
+    toast("Rasm juda katta (8 MB dan kichik bo'lsin)");
+    return;
+  }
+
+  state.avatarBusy = true;
+
+  toast("Rasm tekshirilmoqda…");
+
+  try {
+    const image = await readImage(file);
+
+    // Tekshiruv uchun kattaroq, saqlash uchun kichikroq nusxa
+    const checkCanvas = squareCanvas(image, 224);
+    const saveCanvas = squareCanvas(image, 256);
+
+    const verdict = await checkImage(checkCanvas, checkCanvas);
+
+    if (verdict.nsfw && !verdict.checked) {
+      toast("Bu rasm qabul qilinmadi — boshqa rasm tanlang");
+      state.avatarBusy = false;
+      return;
+    }
+
+    const dataUrl = saveCanvas.toDataURL("image/jpeg", 0.78);
+
+    const { ok, status, data } = await api("/api/avatar", {
+      id: state.id,
+      name: state.name,
+      avatar: dataUrl,
+      nsfw: verdict.nsfw,
+      score: verdict.score
+    });
+
+    if (!ok) {
+      if (status === 403 && data.error === "nsfw") {
+        toast(data.message || "18+ rasm — ban yozildi");
+      } else {
+        toast(data.message || "Rasm saqlanmadi");
+      }
+
+      state.avatarBusy = false;
+
+      fetchWorld();
+
+      return;
+    }
+
+    // Darhol ko'rinsin
+    state.avatars.set(String(state.id), {
+      v: Number(data.avatarAt) || Date.now(),
+      src: dataUrl
+    });
+
+    toast(
+      verdict.checked
+        ? "Profil rasmi qo'yildi ✓"
+        : "Rasm qo'yildi (tekshiruv modeli yuklanmadi)"
+    );
+
+    fetchWorld();
+    refreshProfile();
+    refreshMarkerIcons();
+  } catch (error) {
+    toast((error && error.message) || "Rasm qo'yilmadi");
+  }
+
+  state.avatarBusy = false;
+}
+
+async function removeAvatar() {
+  if (state.avatarBusy) return;
+
+  state.avatarBusy = true;
+
+  try {
+    await api("/api/avatar", { id: state.id, avatar: "" });
+
+    state.avatars.delete(String(state.id));
+
+    toast("Profil rasmi olib tashlandi");
+
+    fetchWorld();
+    refreshProfile();
+    refreshMarkerIcons();
+  } catch {
+    toast("Rasm olib tashlanmadi");
+  }
+
+  state.avatarBusy = false;
 }
 
 // ============================================================
@@ -1677,10 +2182,13 @@ function openProfile(id) {
 
   $("#profileBody").innerHTML =
     '<div class="profile-top">' +
-    '<div class="profile-avatar" style="background:' +
-    esc(color) +
-    '">' +
-    esc((player.name || "Z")[0].toUpperCase()) +
+    '<div class="profile-face">' +
+    (isKing(player) ? '<b class="crown big">👑</b>' : "") +
+    avatarHtml(player, "lg") +
+    (isMe
+      ? '<button class="face-edit" id="avatarBtn" type="button" ' +
+        'aria-label="Rasm qo\'yish">📷</button>'
+      : "") +
     "</div>" +
     "<div class='profile-id'>" +
     "<strong>" +
@@ -1694,6 +2202,11 @@ function openProfile(id) {
     "</small>" +
     "</div>" +
     "</div>" +
+    banHtml(player) +
+    (isMe && avatarOf(player)
+      ? '<button class="text-btn" id="avatarClear" type="button">' +
+        "Rasmni olib tashlash</button>"
+      : "") +
     '<div class="profile-hero">' +
     "<span>JAMI HUDUDI</span>" +
     "<strong>" +
@@ -1711,10 +2224,15 @@ function openProfile(id) {
     (walked / 1000).toFixed(2) +
     " km</strong></div>" +
     "</div>" +
+    friendHtml(player) +
+    adminHtml(player) +
     '<p class="profile-title">HAR BIR KESISHISH</p>' +
     (zones.length
       ? '<div class="loop-list">' + zones.map(loopRow).join("") + "</div>"
       : '<div class="live-empty">Hali hudud egallamagan</div>') +
+    (zones.length
+      ? '<button class="ghost-btn" id="profileBest">ENG KATTA HUDUDINI KO\'RISH</button>'
+      : "") +
     (player.location
       ? '<button class="ghost-btn" id="profileLocate">XARITADA KO\'RSATISH</button>'
       : "");
@@ -1722,6 +2240,148 @@ function openProfile(id) {
   if (scroll) $("#profileBody").scrollTop = scroll;
 
   modal.classList.add("active");
+
+  bindProfileButtons(player, zones);
+}
+
+// ------------------------------------------------------------
+// PROFILDAGI QISMLAR
+// ------------------------------------------------------------
+
+function banDaysLeft(ban) {
+  if (!ban || ban.forever) return 0;
+
+  return Math.max(1, Math.ceil((Number(ban.until) - Date.now()) / 86400000));
+}
+
+function banHtml(player) {
+  const ban = player.ban;
+
+  if (!ban) return "";
+
+  return (
+    '<div class="ban-box">' +
+    "<strong>⛔ BANLANGAN</strong>" +
+    "<span>" +
+    (ban.forever
+      ? "Umrbod"
+      : banDaysLeft(ban) + " kun qoldi (" + banDate(ban.until) + ")") +
+    (ban.reason ? " · " + esc(ban.reason) : "") +
+    "</span>" +
+    "</div>"
+  );
+}
+
+function banDate(stamp) {
+  const date = new Date(Number(stamp) || 0);
+
+  return (
+    String(date.getDate()).padStart(2, "0") +
+    "." +
+    String(date.getMonth() + 1).padStart(2, "0") +
+    "." +
+    date.getFullYear()
+  );
+}
+
+// Do'stlik holati: "me" | "friends" | "sent" | "incoming" | "none"
+function friendState(player) {
+  if (String(player.id) === String(state.id)) return "me";
+
+  const me = playerById(state.id);
+
+  const other = String(player.id);
+
+  if (me && Array.isArray(me.friends) && me.friends.includes(other)) {
+    return "friends";
+  }
+
+  if (me && Array.isArray(me.outgoing) && me.outgoing.includes(other)) {
+    return "sent";
+  }
+
+  if (me && Array.isArray(me.incoming) && me.incoming.includes(other)) {
+    return "incoming";
+  }
+
+  return "none";
+}
+
+function friendHtml(player) {
+  const status = friendState(player);
+
+  if (status === "me") return "";
+
+  if (status === "friends") {
+    return (
+      '<div class="btn-row">' +
+      '<button class="primary sm" id="chatBtn" type="button">XABAR YOZISH</button>' +
+      '<button class="ghost-btn sm" id="unfriendBtn" type="button">DO\'STLIKDAN CHIQARISH</button>' +
+      "</div>"
+    );
+  }
+
+  if (status === "sent") {
+    return (
+      '<div class="btn-row">' +
+      '<button class="ghost-btn sm" id="cancelFriendBtn" type="button">SO\'ROV YUBORILDI · BEKOR QILISH</button>' +
+      "</div>"
+    );
+  }
+
+  if (status === "incoming") {
+    return (
+      '<p class="profile-title">SIZGA DO\'STLIK SO\'ROVI YUBORDI</p>' +
+      '<div class="btn-row">' +
+      '<button class="primary sm" id="acceptFriendBtn" type="button">QABUL QILISH</button>' +
+      '<button class="ghost-btn sm" id="declineFriendBtn" type="button">RAD ETISH</button>' +
+      "</div>"
+    );
+  }
+
+  return (
+    '<div class="btn-row">' +
+    '<button class="primary sm" id="addFriendBtn" type="button">DO\'STLIKKA QO\'SHISH</button>' +
+    "</div>"
+  );
+}
+
+// Admin panel — faqat admin ko'radi
+function adminHtml(player) {
+  const me = playerById(state.id);
+
+  if (!isAdmin(me)) return "";
+
+  if (String(player.id) === String(state.id)) return "";
+
+  if (isAdmin(player)) return "";
+
+  return (
+    '<div class="admin-box">' +
+    '<p class="admin-title"><b class="admin-tag">(admin)</b> BAN BERISH</p>' +
+    '<div class="ban-row">' +
+    '<button class="ban-btn" data-ban="3" type="button">3 kun</button>' +
+    '<button class="ban-btn" data-ban="9" type="button">9 kun</button>' +
+    '<button class="ban-btn" data-ban="15" type="button">15 kun</button>' +
+    '<button class="ban-btn forever" data-ban="-1" type="button">Umrbod</button>' +
+    "</div>" +
+    (player.ban
+      ? '<button class="ghost-btn sm full" data-ban="0" type="button">BANDAN CHIQARISH</button>'
+      : "") +
+    "</div>"
+  );
+}
+
+// ------------------------------------------------------------
+// PROFIL TUGMALARI
+// ------------------------------------------------------------
+
+function bindProfileButtons(player, zones) {
+  const modal = $("#profileModal");
+
+  $("#avatarBtn")?.addEventListener("click", () => $("#avatarInput")?.click());
+
+  $("#avatarClear")?.addEventListener("click", removeAvatar);
 
   $("#profileLocate")?.addEventListener("click", () => {
     if (!player.location || !state.map) return;
@@ -1732,8 +2392,422 @@ function openProfile(id) {
       { duration: 1 }
     );
 
-    modal.classList.remove("active");
+    modal?.classList.remove("active");
   });
+
+  $("#profileBest")?.addEventListener("click", () => {
+    if (!zones.length) return;
+
+    showTerritory(zones[0]);
+
+    modal?.classList.remove("active");
+  });
+
+  // ---- do'stlik ----
+  $("#addFriendBtn")?.addEventListener("click", () =>
+    friendAction("request", player.id)
+  );
+
+  $("#cancelFriendBtn")?.addEventListener("click", () =>
+    friendAction("cancel", player.id)
+  );
+
+  $("#acceptFriendBtn")?.addEventListener("click", () =>
+    friendAction("accept", player.id)
+  );
+
+  $("#declineFriendBtn")?.addEventListener("click", () =>
+    friendAction("decline", player.id)
+  );
+
+  $("#unfriendBtn")?.addEventListener("click", () =>
+    friendAction("remove", player.id)
+  );
+
+  $("#chatBtn")?.addEventListener("click", () => openChat(player.id));
+
+  // ---- admin ----
+  $("#profileBody")
+    ?.querySelectorAll("[data-ban]")
+    .forEach((button) => {
+      button.addEventListener("click", () =>
+        banPlayer(player, Number(button.dataset.ban))
+      );
+    });
+}
+
+// Hududni xaritada ko'rsatamiz
+function showTerritory(territory) {
+  if (!state.map || !territory || !Array.isArray(territory.points)) return;
+
+  try {
+    state.map.fitBounds(L.polygon(territory.points).getBounds(), {
+      padding: [50, 50],
+      maxZoom: 18
+    });
+  } catch {
+    /* nuqtalar buzilgan */
+  }
+}
+
+// ============================================================
+// DO'STLIK
+// ============================================================
+
+async function friendAction(action, target) {
+  if (!state.name) {
+    toast("Avval username tanlang");
+    return;
+  }
+
+  try {
+    const { ok, data } = await api("/api/friends", {
+      id: state.id,
+      action,
+      target: String(target)
+    });
+
+    if (!ok) {
+      toast(data.message || "Amal bajarilmadi");
+      return;
+    }
+
+    if (data.message) toast(data.message);
+
+    applyWorld(data);
+
+    refreshProfile();
+  } catch {
+    toast("Server bilan aloqa yo'q");
+  }
+}
+
+// ============================================================
+// ADMIN — BAN
+// ============================================================
+
+async function banPlayer(player, days) {
+  const me = playerById(state.id);
+
+  if (!isAdmin(me)) {
+    toast("Bu amal faqat admin uchun");
+    return;
+  }
+
+  const label =
+    days === 0
+      ? "bandan chiqarish"
+      : days === -1
+      ? "UMRBOD ban"
+      : days + " kunlik ban";
+
+  if (!window.confirm("@" + player.name + " — " + label + ". Davom etamizmi?")) {
+    return;
+  }
+
+  try {
+    const { ok, status, data } = await api("/api/moderate", {
+      id: state.id,
+      key: state.adminKey,
+      target: String(player.id),
+      days
+    });
+
+    // Server maxfiy so'z talab qilmoqda
+    if (!ok && status === 403) {
+      const key = window.prompt("Admin maxfiy so'zini kiriting (ADMIN_KEY):");
+
+      if (!key) return;
+
+      state.adminKey = key;
+
+      saveStored("zonexAdminKey", key);
+
+      return banPlayer(player, days);
+    }
+
+    if (!ok) {
+      toast(data.message || "Ban berilmadi");
+      return;
+    }
+
+    toast(data.message || "Bajarildi");
+
+    applyWorld(data);
+
+    refreshProfile();
+  } catch {
+    toast("Server bilan aloqa yo'q");
+  }
+}
+
+// ============================================================
+// XABARLAR (CHAT) — faqat do'stlar orasida
+// ============================================================
+
+function openChat(id) {
+  const person = playerById(id);
+
+  if (!person) return;
+
+  if (friendState(person) !== "friends") {
+    toast("Avval do'st bo'lishingiz kerak");
+    return;
+  }
+
+  state.chatWith = String(id);
+  state.chatMessages = [];
+
+  $("#profileModal")?.classList.remove("active");
+
+  const head = $("#chatHead");
+
+  if (head) {
+    head.innerHTML =
+      avatarHtml(person, "sm") +
+      "<span>" +
+      crownHtml(person) +
+      nameHtml(person) +
+      "</span>";
+  }
+
+  $("#chatBox").innerHTML = '<div class="live-empty">Yuklanmoqda…</div>';
+
+  $("#chatModal")?.classList.add("active");
+
+  $("#chatInput")?.focus();
+
+  loadChat();
+
+  clearInterval(state.chatTimer);
+
+  state.chatTimer = setInterval(loadChat, 3000);
+}
+
+function closeChat() {
+  state.chatWith = "";
+
+  clearInterval(state.chatTimer);
+
+  state.chatTimer = null;
+
+  $("#chatModal")?.classList.remove("active");
+}
+
+async function loadChat() {
+  if (!state.chatWith) return;
+
+  try {
+    const { ok, data } = await api(
+      "/api/messages?id=" +
+        encodeURIComponent(state.id) +
+        "&with=" +
+        encodeURIComponent(state.chatWith)
+    );
+
+    if (!ok || !Array.isArray(data.messages)) return;
+
+    // Yangi xabar kelmagan bo'lsa — qayta chizmaymiz
+    if (data.messages.length === state.chatMessages.length) return;
+
+    state.chatMessages = data.messages;
+
+    renderChat();
+  } catch {
+    /* internet yo'q */
+  }
+}
+
+function renderChat() {
+  const box = $("#chatBox");
+
+  if (!box) return;
+
+  if (!state.chatMessages.length) {
+    box.innerHTML =
+      '<div class="live-empty">Hali xabar yo\'q — birinchi bo\'lib yozing</div>';
+
+    return;
+  }
+
+  box.innerHTML = state.chatMessages
+    .map((message) => {
+      const mine = String(message.from) === String(state.id);
+
+      return (
+        '<div class="msg' +
+        (mine ? " mine" : "") +
+        '">' +
+        "<p>" +
+        esc(message.text) +
+        "</p>" +
+        "<small>" +
+        clockOf(message.time) +
+        "</small>" +
+        "</div>"
+      );
+    })
+    .join("");
+
+  box.scrollTop = box.scrollHeight;
+}
+
+function clockOf(stamp) {
+  const date = new Date(Number(stamp) || 0);
+
+  return (
+    String(date.getHours()).padStart(2, "0") +
+    ":" +
+    String(date.getMinutes()).padStart(2, "0")
+  );
+}
+
+async function sendMessage() {
+  const input = $("#chatInput");
+
+  const text = String(input?.value || "").trim();
+
+  if (!text || !state.chatWith) return;
+
+  input.value = "";
+
+  try {
+    const { ok, data } = await api("/api/messages", {
+      id: state.id,
+      to: state.chatWith,
+      text
+    });
+
+    if (!ok) {
+      toast(data.message || "Xabar ketmadi");
+      input.value = text;
+      return;
+    }
+
+    state.chatMessages = Array.isArray(data.messages) ? data.messages : [];
+
+    renderChat();
+  } catch {
+    toast("Internet yo'q — xabar ketmadi");
+    input.value = text;
+  }
+}
+
+// ============================================================
+// QIDIRUV — username bo'yicha
+// ============================================================
+//
+// Topilgan odamning qayerlarni bosib olgani ko'rinadi:
+// eng katta hududi birinchi turadi.
+// ============================================================
+
+function searchResults(text) {
+  const query = String(text || "").trim().toLowerCase().replace(/^@+/, "");
+
+  if (!query) return [];
+
+  return state.players
+    .filter(
+      (player) =>
+        player &&
+        player.name &&
+        String(player.name).toLowerCase().includes(query)
+    )
+    .sort((a, b) => Number(b.area || 0) - Number(a.area || 0))
+    .slice(0, 12);
+}
+
+function renderSearch() {
+  const box = $("#searchResults");
+
+  if (!box || !state.searchOpen) return;
+
+  if (!state.searchText.trim()) {
+    box.innerHTML =
+      '<div class="live-empty">Username yozing — masalan, jasur</div>';
+
+    return;
+  }
+
+  const found = searchResults(state.searchText);
+
+  if (!found.length) {
+    box.innerHTML = '<div class="live-empty">Bunday username topilmadi</div>';
+
+    return;
+  }
+
+  box.innerHTML = found
+    .map((player) => {
+      const zones = territoriesOf(player)
+        .slice()
+        .sort((a, b) => Number(b.area || 0) - Number(a.area || 0));
+
+      const rows = zones
+        .slice(0, 5)
+        .map((territory, index) => {
+          const meters = Number(territory.distance) || 0;
+
+          return (
+            '<button class="found-zone' +
+            (index === 0 ? " best" : "") +
+            '" type="button" data-zone-owner="' +
+            esc(player.id) +
+            '" data-zone-id="' +
+            esc(territory.id || "") +
+            '">' +
+            (index === 0 ? '<b class="best-tag">ENG KATTA</b>' : "") +
+            "<strong>" +
+            Math.round(Number(territory.area) || 0).toLocaleString() +
+            " m²</strong>" +
+            "<span>" +
+            (meters ? (meters / 1000).toFixed(2) + " km" : "— km") +
+            "</span>" +
+            "</button>"
+          );
+        })
+        .join("");
+
+      return (
+        '<div class="found">' +
+        '<button class="found-head" type="button" data-player-id="' +
+        esc(player.id) +
+        '">' +
+        avatarHtml(player, "md") +
+        '<span class="found-info">' +
+        "<strong>" +
+        crownHtml(player) +
+        nameHtml(player) +
+        "</strong>" +
+        "<small>" +
+        Math.round(Number(player.area || 0)).toLocaleString() +
+        " m² · " +
+        zones.length +
+        " ta hudud</small>" +
+        "</span><b>›</b></button>" +
+        (rows
+          ? '<div class="found-zones">' + rows + "</div>"
+          : '<div class="live-empty sm">Hali hudud egallamagan</div>') +
+        "</div>"
+      );
+    })
+    .join("");
+}
+
+function openSearch() {
+  state.searchOpen = true;
+
+  $("#searchPanel")?.classList.add("open");
+
+  renderSearch();
+
+  $("#searchInput")?.focus();
+}
+
+function closeSearch() {
+  state.searchOpen = false;
+
+  $("#searchPanel")?.classList.remove("open");
 }
 
 function closeProfile() {
@@ -1792,11 +2866,10 @@ function renderLive() {
         '<button class="live-player" type="button" data-player-id="' +
         esc(p.id) +
         '">' +
-        '<i style="background:' +
-        esc(p.color || colorFromId(p.id)) +
-        '"></i>' +
+        avatarHtml(p, "md") +
         '<span class="live-player-info">' +
         "<strong>" +
+        crownHtml(p) +
         nameHtml(p, isMe ? " (Siz)" : "") +
         "</strong>" +
         "<small>" +
@@ -1910,6 +2983,23 @@ function setAvatar() {
       ? state.name[0].toUpperCase()
       : "Z";
   }
+
+  // Yuqoridagi tugmada o'z rasmim tursin
+  const button = $("#profileBtn");
+
+  if (!button) return;
+
+  const me = playerById(state.id);
+
+  const src = me ? avatarOf(me) : "";
+
+  if (src) {
+    button.style.backgroundImage = 'url("' + src + '")';
+    button.classList.add("has-photo");
+  } else {
+    button.style.backgroundImage = "";
+    button.classList.remove("has-photo");
+  }
 }
 
 // Eski akkauntni server bilan moslash (username qayta so'ralmaydi)
@@ -2017,6 +3107,72 @@ function bindButtons() {
 
   $("#profileModal")?.addEventListener("click", (event) => {
     if (event.target === $("#profileModal")) closeProfile();
+  });
+
+  // ---- profil rasmi ----
+  $("#avatarInput")?.addEventListener("change", (event) => {
+    const file = event.target.files && event.target.files[0];
+
+    // Bir xil faylni qayta tanlash ham ishlasin
+    event.target.value = "";
+
+    if (file) uploadAvatar(file);
+  });
+
+  // ---- suhbat ----
+  $("#closeChat")?.addEventListener("click", closeChat);
+
+  $("#chatSend")?.addEventListener("click", sendMessage);
+
+  $("#chatInput")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") sendMessage();
+  });
+
+  $("#chatModal")?.addEventListener("click", (event) => {
+    if (event.target === $("#chatModal")) closeChat();
+  });
+
+  // ---- qidiruv ----
+  $("#searchBtn")?.addEventListener("click", () => {
+    if (state.searchOpen) closeSearch();
+    else openSearch();
+  });
+
+  $("#closeSearch")?.addEventListener("click", closeSearch);
+
+  $("#searchInput")?.addEventListener("input", (event) => {
+    state.searchText = event.target.value;
+
+    renderSearch();
+  });
+
+  $("#searchResults")?.addEventListener("click", (event) => {
+    // Hudud bosildi — o'sha yerga uchamiz
+    const zoneButton = event.target.closest(".found-zone");
+
+    if (zoneButton) {
+      const owner = playerById(zoneButton.dataset.zoneOwner);
+
+      const territory = territoriesOf(owner).find(
+        (t) => String(t.id || "") === String(zoneButton.dataset.zoneId)
+      );
+
+      if (territory) {
+        showTerritory(territory);
+        closeSearch();
+      }
+
+      return;
+    }
+
+    // Odam bosildi — profili ochiladi
+    const head = event.target.closest(".found-head");
+
+    if (!head) return;
+
+    closeSearch();
+
+    openProfile(head.dataset.playerId);
   });
 
   bindLive();

@@ -33,8 +33,22 @@
     </div>
   </div>
 </div>
+    <button class="search-btn" id="searchBtn" type="button" aria-label="Qidiruv">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    </button>
     <button class="avatar" id="profileBtn" aria-label="Profil"><span id="avatarLetter">Z</span><em id="levelBadge">1</em></button>
   </header>
+
+  <div id="searchPanel" class="search-panel">
+    <div class="search-head">
+      <input id="searchInput" type="search" placeholder="Username qidirish…"
+             autocapitalize="off" autocorrect="off" spellcheck="false" />
+      <button id="closeSearch" type="button" aria-label="Yopish">×</button>
+    </div>
+    <div id="searchResults"></div>
+  </div>
+
+  <input type="file" id="avatarInput" accept="image/*" hidden />
 
   <section class="area-card glass">
     <p>MENING HUDUDIM</p>
@@ -98,6 +112,21 @@
     <div class="modal-card profile">
       <button class="close-x" id="closeProfile" type="button" aria-label="Yopish">×</button>
       <div id="profileBody"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="chatModal">
+    <div class="modal-card chat">
+      <div class="chat-top">
+        <div id="chatHead" class="chat-head"></div>
+        <button class="close-x" id="closeChat" type="button" aria-label="Yopish">×</button>
+      </div>
+      <div id="chatBox" class="chat-box"></div>
+      <div class="chat-send">
+        <input id="chatInput" maxlength="500" placeholder="Xabar yozing…"
+               autocomplete="off" />
+        <button id="chatSend" type="button" aria-label="Yuborish">➤</button>
+      </div>
     </div>
   </div>
 
