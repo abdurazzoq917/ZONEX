@@ -1797,7 +1797,11 @@ function avatarOf(player) {
 
   const cached = state.avatars.get(id);
 
-  if (cached && cached.v === version) return cached.src;
+  // Kesh serverdan bilganimizdan yangiroq (yoki teng) bo'lsa — unga
+  // ishonamiz. Masalan, o'zimiz endigina rasm qo'yganimizda
+  // `state.players` hali eski (avatarAt=0) bo'lishi mumkin — shu
+  // holatda ham darhol yangi rasm ko'rinsin, eskisi qaytmasin.
+  if (cached && cached.v > 0 && cached.v >= version) return cached.src;
 
   // Rasm yo'q — keshni tozalaymiz
   if (!version || player.hasAvatar === false) {
@@ -2191,6 +2195,9 @@ async function uploadAvatar(file) {
     fetchWorld();
     refreshProfile();
     refreshMarkerIcons();
+    renderBoard();
+    renderLive();
+    refreshZoneLabels();
   } catch (error) {
     toast((error && error.message) || "Rasm qo'yilmadi");
   }
@@ -2213,6 +2220,9 @@ async function removeAvatar() {
     fetchWorld();
     refreshProfile();
     refreshMarkerIcons();
+    renderBoard();
+    renderLive();
+    refreshZoneLabels();
   } catch {
     toast("Rasm olib tashlanmadi");
   }
