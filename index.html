@@ -33,6 +33,11 @@
     </div>
   </div>
 </div>
+    <button class="chat-btn" id="friendsBtn" type="button" aria-label="Do'stlar va xabarlar">
+      <svg viewBox="0 0 24 24"><path d="M20.5 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.4-4.3a7.5 7.5 0 1 1 15.1-3.7Z"/></svg>
+      <em id="friendsBadge" hidden>0</em>
+    </button>
+
     <button class="search-btn" id="searchBtn" type="button" aria-label="Qidiruv">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     </button>
@@ -46,6 +51,14 @@
       <button id="closeSearch" type="button" aria-label="Yopish">×</button>
     </div>
     <div id="searchResults"></div>
+  </div>
+
+  <div id="friendsPanel" class="friends-panel">
+    <div class="live-header">
+      <strong>DO'STLAR</strong>
+      <button id="closeFriends" type="button" aria-label="Yopish">×</button>
+    </div>
+    <div id="friendsBody"></div>
   </div>
 
   <input type="file" id="avatarInput" accept="image/*" hidden />

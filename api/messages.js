@@ -3,6 +3,7 @@
 // XABARLAR (CHAT) — faqat do'stlar orasida
 //
 //   GET  /api/messages?id=<men>&with=<u>   — suhbatni olish
+//   GET  /api/messages?id=<men>&list=1     — do'stlar + oxirgi xabar
 //   POST /api/messages { id, to, text }    — xabar yozish
 //
 // Do'st bo'lmagan odamga xabar ketmaydi.
@@ -42,6 +43,71 @@ module.exports = async function handler(req, res) {
 
       const id = String(params.get("id") || "").trim();
       const other = String(params.get("with") || "").trim();
+
+      // -----------------------------------------------------
+      // DO'STLAR RO'YXATI + HAR BIRI BILAN OXIRGI XABAR
+      // -----------------------------------------------------
+      //
+      // Bitta so'rov bilan "do'stlar / suhbatlar" ekranini
+      // to'ldirish uchun kerak.
+      // -----------------------------------------------------
+
+      if (params.get("list")) {
+        if (!id) {
+          return json(res, 400, { error: "id kerak" });
+        }
+
+        const all = await readPlayers();
+
+        const self = all[id];
+
+        if (!self) {
+          return json(res, 400, { error: "Avval ro'yxatdan o'ting" });
+        }
+
+        const ids = Array.isArray(self.friends) ? self.friends : [];
+
+        const friends = [];
+
+        for (const friendId of ids) {
+          const mate = all[friendId];
+
+          if (!mate) continue;
+
+          const chat = await readChat(id, friendId);
+
+          const last = chat.length ? chat[chat.length - 1] : null;
+
+          friends.push({
+            id: mate.id,
+            name: mate.name,
+            color: mate.color,
+
+            avatarAt: mate.avatarAt,
+            hasAvatar: Boolean(mate.avatar),
+
+            lastSeen: Number(mate.location && mate.location.time) || 0,
+
+            last: last
+              ? { from: last.from, text: last.text, time: last.time }
+              : null
+          });
+        }
+
+        // Oxirgi yozishilgan suhbat tepada tursin
+        friends.sort(
+          (a, b) =>
+            Number((b.last && b.last.time) || 0) -
+            Number((a.last && a.last.time) || 0)
+        );
+
+        return json(res, 200, {
+          ok: true,
+          friends,
+          incoming: Array.isArray(self.incoming) ? self.incoming : [],
+          time: Date.now()
+        });
+      }
 
       if (!id || !other) {
         return json(res, 400, { error: "id va with kerak" });

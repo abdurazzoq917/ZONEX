@@ -213,6 +213,15 @@ const state = {
   chatTimer: null,
   chatMessages: [],
 
+  // do'stlar / suhbatlar ro'yxati
+  friendsOpen: false,
+  chatList: [],
+  chatListTimer: null,
+  chatListBusy: false,
+
+  // qaysi suhbatni qachon o'qiganman: { id: vaqt }
+  seen: {},
+
   // qidiruv
   searchOpen: false,
   searchText: "",
@@ -561,6 +570,85 @@ function zoneStamp(territory, player, isMe) {
   );
 }
 
+// Hududning ustidagi yozuv o'zgardimi (user, masofa, rasm, toj)
+function zoneLabelStamp(territory, player) {
+  return (
+    String(player.name) +
+    "|" +
+    String(Math.round(zoneDistance(territory))) +
+    "|" +
+    String(Math.round(Number(territory.area) || 0)) +
+    "|" +
+    String(player.avatarAt || 0) +
+    "|" +
+    (avatarOf(player) ? "1" : "0") +
+    "|" +
+    (isKing(player) ? "k" : "-")
+  );
+}
+
+// Hudud uchun yurilgan masofa. Eski hududlarda saqlanmagan
+// bo'lsa — halqaning o'z uzunligi olinadi.
+function zoneDistance(territory) {
+  const saved = Number(territory.distance);
+
+  if (Number.isFinite(saved) && saved > 0) return saved;
+
+  return Array.isArray(territory.points) && territory.points.length > 2
+    ? perimeter(territory.points)
+    : 0;
+}
+
+// 940 m / 1.54 km
+function distanceText(meters) {
+  const value = Number(meters) || 0;
+
+  if (value <= 0) return "0 m";
+
+  if (value < 1000) return Math.round(value) + " m";
+
+  return (value / 1000).toFixed(2) + " km";
+}
+
+// ------------------------------------------------------------
+// Hudud ustida turadigan yozuv:
+//
+//    [rasm] @username
+//           1.54 km
+//
+// Yuqorida — egasining useri, pastda — o'sha hududni yopish
+// uchun yurilgan masofa (yurish yakunlanganda saqlanadi).
+// ------------------------------------------------------------
+
+function zoneLabelHtml(territory, player) {
+  const color = player.color || colorFromId(player.id);
+
+  const src = avatarOf(player);
+
+  const badge = src
+    ? '<i class="zone-av" style="background-image:url(&quot;' +
+      esc(src) +
+      '&quot;)"></i>'
+    : '<i class="zone-av letter" style="background:' +
+      esc(color) +
+      '">' +
+      esc(initials(player)) +
+      "</i>";
+
+  return (
+    '<span class="zone-label">' +
+    '<b class="zone-name">' +
+    badge +
+    nameHtml(player) +
+    crownHtml(player) +
+    "</b>" +
+    '<i class="zone-dist">' +
+    esc(distanceText(zoneDistance(territory))) +
+    "</i>" +
+    "</span>"
+  );
+}
+
 function drawZone(key, territory, player, isMe) {
   const color = player.color || colorFromId(player.id);
 
@@ -571,15 +659,12 @@ function drawZone(key, territory, player, isMe) {
     weight: isMe ? 3 : 2
   }).addTo(state.map);
 
-  // Hududning ustida egasining useri turadi
-  polygon.bindTooltip(
-    '<span style="color:' + esc(color) + '">' + nameHtml(player) + "</span>",
-    {
-      permanent: true,
-      direction: "center",
-      className: "owner-label"
-    }
-  );
+  // Hududning ustida egasining useri va yurgan masofasi turadi
+  polygon.bindTooltip(zoneLabelHtml(territory, player), {
+    permanent: true,
+    direction: "center",
+    className: "owner-label"
+  });
 
   // Hudud bosilsa — egasining profili ochiladi
   polygon.on("click", (event) => {
@@ -590,7 +675,11 @@ function drawZone(key, territory, player, isMe) {
 
   state.zoneLayers.set(key, {
     layer: polygon,
-    stamp: zoneStamp(territory, player, isMe)
+    player,
+    territory,
+    isMe,
+    stamp: zoneStamp(territory, player, isMe),
+    labelStamp: zoneLabelStamp(territory, player)
   });
 }
 
@@ -615,7 +704,15 @@ function renderZones(list) {
 
       if (existing) {
         // Faqat rang / egasi o'zgargan bo'lsa qayta chizamiz
-        if (existing.stamp === stamp) return;
+        if (existing.stamp === stamp) {
+          // Shakl o'sha — faqat ustidagi yozuvni yangilaymiz
+          existing.player = player;
+          existing.territory = territory;
+
+          updateZoneLabel(existing);
+
+          return;
+        }
 
         existing.layer.remove();
         state.zoneLayers.delete(key);
@@ -637,6 +734,30 @@ function renderZones(list) {
 
     state.zoneLayers.delete(key);
   });
+}
+
+// Hudud ustidagi yozuvni (user + masofa) joyida yangilaydi
+function updateZoneLabel(entry) {
+  if (!entry || !entry.player || !entry.territory) return;
+
+  const labelStamp = zoneLabelStamp(entry.territory, entry.player);
+
+  if (entry.labelStamp === labelStamp) return;
+
+  entry.labelStamp = labelStamp;
+
+  try {
+    entry.layer.setTooltipContent(
+      zoneLabelHtml(entry.territory, entry.player)
+    );
+  } catch {
+    /* hudud olib tashlangan */
+  }
+}
+
+// Rasm yoki toj kelgach hududlar ustidagi yozuvlar yangilanadi
+function refreshZoneLabels() {
+  state.zoneLayers.forEach((entry) => updateZoneLabel(entry));
 }
 
 // Odamlar markeri joyida siljitiladi, qayta yaratilmaydi
@@ -864,6 +985,7 @@ function renderWorld(players) {
   renderLive();
   refreshProfile();
   renderSearch();
+  renderFriends();
 }
 
 function updateMyCard(me, mine) {
@@ -945,6 +1067,13 @@ function startPolling() {
   clearInterval(state.worldTimer);
 
   state.worldTimer = setInterval(fetchWorld, CONFIG.POLL_MS);
+
+  // O'qilmagan xabar nishoni — panel yopiq bo'lsa ham yangilanadi
+  loadChatList();
+
+  clearInterval(state.chatListTimer);
+
+  state.chatListTimer = setInterval(loadChatList, 25000);
 }
 
 async function sendLocation(point, accuracy) {
@@ -1702,6 +1831,7 @@ async function loadAvatar(id, version) {
       renderLive();
       refreshProfile();
       refreshMarkerIcons();
+      refreshZoneLabels();
     }
   } catch {
     /* keyingi safar */
@@ -2585,6 +2715,9 @@ function openChat(id) {
 }
 
 function closeChat() {
+  // Ro'yxatdagi "oxirgi xabar" yangilansin
+  loadChatList();
+
   state.chatWith = "";
 
   clearInterval(state.chatTimer);
@@ -2606,6 +2739,10 @@ async function loadChat() {
     );
 
     if (!ok || !Array.isArray(data.messages)) return;
+
+    const newest = data.messages[data.messages.length - 1];
+
+    if (newest) markChatSeen(state.chatWith, newest.time);
 
     // Yangi xabar kelmagan bo'lsa — qayta chizmaymiz
     if (data.messages.length === state.chatMessages.length) return;
@@ -2908,6 +3045,300 @@ function bindLive() {
 }
 
 // ============================================================
+// DO'STLAR VA XABARLAR
+// ============================================================
+//
+// Tepadagi tugma ostida do'stlar ro'yxati turadi:
+//   - kelgan do'stlik so'rovlari (qabul qilish / rad etish)
+//   - do'stlar va ular bilan oxirgi xabar
+//
+// O'qilmagan xabar bo'lsa tugmada qizil raqam chiqadi.
+// ============================================================
+
+function loadSeen() {
+  try {
+    const raw = loadBig("zonexSeen");
+
+    const parsed = raw ? JSON.parse(raw) : {};
+
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveSeen() {
+  saveBig("zonexSeen", JSON.stringify(state.seen));
+}
+
+// Suhbat ochildi — shu vaqtgacha bo'lgani o'qilgan hisoblanadi
+function markChatSeen(id, time) {
+  const key = String(id || "");
+
+  if (!key) return;
+
+  const stamp = Number(time) || Date.now();
+
+  if (Number(state.seen[key] || 0) >= stamp) return;
+
+  state.seen[key] = stamp;
+
+  saveSeen();
+
+  renderFriends();
+}
+
+function isUnread(row) {
+  if (!row || !row.last) return false;
+
+  // O'zim yozgan xabar o'qilmagan bo'lmaydi
+  if (String(row.last.from) === String(state.id)) return false;
+
+  return Number(row.last.time || 0) > Number(state.seen[String(row.id)] || 0);
+}
+
+// Menga do'stlik so'rovi yuborganlar
+function incomingRequests() {
+  const me = playerById(state.id);
+
+  const ids = me && Array.isArray(me.incoming) ? me.incoming : [];
+
+  return ids.map((id) => playerById(id)).filter(Boolean);
+}
+
+function unreadCount() {
+  return state.chatList.filter(isUnread).length;
+}
+
+// Kim onlayn — do'st nomi yonidagi yashil nuqta uchun
+function isOnlineFriend(row) {
+  const player = playerById(row.id);
+
+  const time =
+    player && player.location
+      ? Number(player.location.time || 0)
+      : Number(row.lastSeen || 0);
+
+  return Boolean(time) && Date.now() - time < CONFIG.ONLINE_MS;
+}
+
+function updateFriendsBadge() {
+  const badge = $("#friendsBadge");
+
+  if (!badge) return;
+
+  const count = incomingRequests().length + unreadCount();
+
+  badge.hidden = !count;
+  badge.textContent = count > 9 ? "9+" : String(count);
+
+  $("#friendsBtn")?.classList.toggle("has-new", Boolean(count));
+}
+
+function friendRowHtml(row) {
+  const player = playerById(row.id) || row;
+
+  const last = row.last;
+
+  const unread = isUnread(row);
+
+  const preview = last
+    ? (String(last.from) === String(state.id) ? "Siz: " : "") + last.text
+    : "Hali xabar yo'q — birinchi bo'lib yozing";
+
+  return (
+    '<div class="friend-row' +
+    (unread ? " unread" : "") +
+    '">' +
+    '<button class="friend-open" type="button" data-chat-id="' +
+    esc(row.id) +
+    '">' +
+    '<span class="friend-face' +
+    (isOnlineFriend(row) ? " on" : "") +
+    '">' +
+    avatarHtml(player, "md") +
+    "</span>" +
+    '<span class="friend-info">' +
+    "<strong>" +
+    crownHtml(player) +
+    nameHtml(player) +
+    "</strong>" +
+    "<small>" +
+    esc(preview) +
+    "</small>" +
+    "</span>" +
+    '<span class="friend-meta">' +
+    (last ? "<i>" + clockOf(last.time) + "</i>" : "") +
+    (unread ? '<b class="dot"></b>' : "") +
+    "</span>" +
+    "</button>" +
+    '<button class="friend-prof" type="button" data-player-id="' +
+    esc(row.id) +
+    '" aria-label="Profil">\u203a</button>' +
+    "</div>"
+  );
+}
+
+function requestRowHtml(player) {
+  return (
+    '<div class="friend-row req">' +
+    '<button class="friend-open" type="button" data-player-id="' +
+    esc(player.id) +
+    '">' +
+    '<span class="friend-face">' +
+    avatarHtml(player, "md") +
+    "</span>" +
+    '<span class="friend-info">' +
+    "<strong>" +
+    nameHtml(player) +
+    "</strong>" +
+    "<small>do'stlik so'rovi yubordi</small>" +
+    "</span>" +
+    "</button>" +
+    '<span class="req-actions">' +
+    '<button class="mini ok" type="button" data-accept="' +
+    esc(player.id) +
+    '" aria-label="Qabul qilish">\u2713</button>' +
+    '<button class="mini no" type="button" data-decline="' +
+    esc(player.id) +
+    '" aria-label="Rad etish">\u00d7</button>' +
+    "</span>" +
+    "</div>"
+  );
+}
+
+function renderFriends() {
+  updateFriendsBadge();
+
+  const box = $("#friendsBody");
+
+  if (!box || !state.friendsOpen) return;
+
+  if (!state.name) {
+    box.innerHTML = '<div class="live-empty">Avval username tanlang</div>';
+
+    return;
+  }
+
+  const requests = incomingRequests();
+
+  // Do'stlar: server ro'yxati kelmagan bo'lsa — o'zimdagi id'lardan
+  const me = playerById(state.id);
+
+  const rows = state.chatList.length
+    ? state.chatList
+    : (me && Array.isArray(me.friends) ? me.friends : []).map((id) => ({
+        id,
+        last: null
+      }));
+
+  box.innerHTML =
+    (requests.length
+      ? '<p class="friends-title">SO\'ROVLAR \u00b7 ' +
+        requests.length +
+        "</p>" +
+        requests.map(requestRowHtml).join("")
+      : "") +
+    '<p class="friends-title">DO\'STLARIM' +
+    (rows.length ? " \u00b7 " + rows.length : "") +
+    "</p>" +
+    (rows.length
+      ? rows.map(friendRowHtml).join("")
+      : '<div class="live-empty">Hali do\'stingiz yo\'q — qidiruvdan ' +
+        "username toping va do'stlikka qo'shing</div>");
+}
+
+// Do'stlar va ular bilan oxirgi xabarlar — bitta so'rov bilan
+async function loadChatList() {
+  if (!state.name || state.chatListBusy) return;
+
+  state.chatListBusy = true;
+
+  try {
+    const { ok, data } = await api(
+      "/api/messages?list=1&id=" + encodeURIComponent(state.id)
+    );
+
+    if (ok && Array.isArray(data.friends)) {
+      state.chatList = data.friends;
+
+      renderFriends();
+    }
+  } catch {
+    /* internet yo'q — keyingi safar */
+  }
+
+  state.chatListBusy = false;
+}
+
+function openFriends() {
+  state.friendsOpen = true;
+
+  $("#friendsPanel")?.classList.add("open");
+
+  renderFriends();
+  loadChatList();
+
+  clearInterval(state.chatListTimer);
+
+  state.chatListTimer = setInterval(loadChatList, 5000);
+}
+
+function closeFriends() {
+  state.friendsOpen = false;
+
+  $("#friendsPanel")?.classList.remove("open");
+
+  clearInterval(state.chatListTimer);
+
+  // Panel yopiq bo'lsa ham nishon yangilanib tursin
+  state.chatListTimer = setInterval(loadChatList, 25000);
+}
+
+function bindFriends() {
+  $("#friendsBtn")?.addEventListener("click", () => {
+    if (state.friendsOpen) closeFriends();
+    else openFriends();
+  });
+
+  $("#closeFriends")?.addEventListener("click", closeFriends);
+
+  $("#friendsBody")?.addEventListener("click", (event) => {
+    const accept = event.target.closest("[data-accept]");
+
+    if (accept) {
+      friendAction("accept", accept.dataset.accept).then(loadChatList);
+
+      return;
+    }
+
+    const decline = event.target.closest("[data-decline]");
+
+    if (decline) {
+      friendAction("decline", decline.dataset.decline).then(loadChatList);
+
+      return;
+    }
+
+    const profile = event.target.closest("[data-player-id]");
+
+    if (profile) {
+      closeFriends();
+      openProfile(profile.dataset.playerId);
+
+      return;
+    }
+
+    const chat = event.target.closest("[data-chat-id]");
+
+    if (chat) {
+      closeFriends();
+      openChat(chat.dataset.chatId);
+    }
+  });
+}
+
+// ============================================================
 // USERNAME — FAQAT BIR MARTA
 // ============================================================
 
@@ -3176,6 +3607,7 @@ function bindButtons() {
   });
 
   bindLive();
+  bindFriends();
 }
 
 // ============================================================
@@ -3188,6 +3620,7 @@ async function boot() {
   initMap();
 
   state.pending = loadPending();
+  state.seen = loadSeen();
 
   applyColor(state.color || colorFromId(state.id));
   setAvatar();
