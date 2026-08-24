@@ -2294,7 +2294,10 @@ function openProfile(id) {
 
   const area = zones.reduce((sum, t) => sum + (Number(t.area) || 0), 0);
 
-  const walked = zones.reduce((sum, t) => sum + (Number(t.distance) || 0), 0);
+  // Umrbod yurgan masofa — hududlar bosib olinsa ham kamaymaydi
+  // (faqat egallab turgan hududlar yig'indisidan emas, serverdagi
+  // umumiy hisobdan olinadi).
+  const walked = Number(player.totalDistance) || 0;
 
   const best = zones.length ? Number(zones[0].area) || 0 : 0;
 
