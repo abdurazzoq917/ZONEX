@@ -6,3 +6,13 @@
 node_modules/
 .vercel/
 npm-debug.log*
+
+# Native (Capacitor) build artifacts — root fayllardan build:native
+# skripti bilan qayta yaratiladi, git'ga tushmaydi.
+/public/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/*.keystore
+android/app/*.jks

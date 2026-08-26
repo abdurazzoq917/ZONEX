@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FAQAT DEBUG build uchun (Play Store'ga chiqadigan release
+  build'da ishlatilmaydi). "npm start" bilan ko'tarilgan lokal
+  HTTP serverga (masalan http://192.168.0.21:4173) ulanib
+  sinash imkonini beradi.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

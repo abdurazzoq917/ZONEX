@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ZONEX</string>
+    <string name="title_activity_main">ZONEX</string>
+    <string name="package_name">com.zonex.app</string>
+    <string name="custom_url_scheme">com.zonex.app</string>
+
+    <!-- Fonda joylashuv kuzatilayotganda ko'rinadigan doimiy bildirishnoma -->
+    <string name="capacitor_background_geolocation_notification_channel_name">
+        Yurish kuzatuvi
+    </string>
+    <string name="capacitor_background_geolocation_notification_color">
+        #4C6FFF
+    </string>
+</resources>

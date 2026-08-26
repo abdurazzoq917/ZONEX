@@ -1,0 +1,13 @@
+{
+  "appId": "com.zonex.app",
+  "appName": "ZONEX",
+  "webDir": "public",
+  "android": {
+    "useLegacyBridge": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

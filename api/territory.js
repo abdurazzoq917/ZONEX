@@ -228,9 +228,19 @@ module.exports = async function handler(req, res) {
     // Shu tufayli bir joy hech qachon ikki marta sanalmaydi va
     // "birovning yeridan yursang — o'sha joy senga o'tadi"
     // qoidasi ishlaydi.
+    //
+    // FAQAT BOSHQA O'YINCHILARGA nisbatan ishlaydi. O'zining
+    // eski hududiga qisman tegib o'tish (masalan, karta har
+    // 3 sekundda yangilanayotganda yoki GPS titrashi tufayli
+    // hosil bo'lgan kichik halqalar) uni KICHRAYTIRMAYDI —
+    // o'z yerini faqat to'liq (>= CAPTURE_RATIO) qamrab olib,
+    // kattaroq halqa bilan almashtirganda kattalashtirish
+    // mumkin (yuqoridagi TO'LIQ BOSIB OLISH bo'limi).
     // ---------------------------------------------------------
 
     Object.values(players).forEach((other) => {
+      if (String(other.id) === String(player.id)) return;
+
       if (!Array.isArray(other.territories) || !other.territories.length) {
         return;
       }
@@ -253,14 +263,12 @@ module.exports = async function handler(req, res) {
 
         // Deyarli hech nima qolmadi — hudud butunlay qo'ldan ketdi
         if (left < RULES.MIN_AREA) {
-          if (String(other.id) !== String(player.id)) {
-            captured.push({
-              territoryId: territory.id || null,
-              ownerId: other.id,
-              ownerName: other.name,
-              area: Number(territory.area) || 0
-            });
-          }
+          captured.push({
+            territoryId: territory.id || null,
+            ownerId: other.id,
+            ownerName: other.name,
+            area: Number(territory.area) || 0
+          });
 
           return;
         }

@@ -19,6 +19,20 @@
 const $ = (s) => document.querySelector(s);
 
 // ============================================================
+// API MANZILI
+// ============================================================
+//
+// Veb-saytda (o'sha domendan ochilganda) bo'sh qoladi — nisbiy
+// "/api/..." manzillar ishlatiladi. Native ilovada (Capacitor)
+// sahifa "capacitor://localhost" dan ochiladi va lokal /api
+// yo'q — shuning uchun native/native-config.js fayli
+// window.ZONEX_API_BASE ni serverning to'liq manziliga
+// o'rnatadi (masalan "https://zonex.vercel.app").
+// ============================================================
+
+const API_BASE = (typeof window !== "undefined" && window.ZONEX_API_BASE) || "";
+
+// ============================================================
 // SOZLAMALAR
 // ============================================================
 
@@ -167,6 +181,8 @@ const state = {
   lastFix: null,
   lastSent: 0,
   speed: 0,
+  wakeLock: null,
+  bgGeo: null,
 
   // yurish
   active: false,
@@ -1028,7 +1044,7 @@ function updateMyCard(me, mine) {
 // ============================================================
 
 async function api(url, body) {
-  const response = await fetch(url, {
+  const response = await fetch(API_BASE + url, {
     method: body ? "POST" : "GET",
     cache: "no-store",
     headers: body ? { "Content-Type": "application/json" } : undefined,
@@ -1192,7 +1208,7 @@ function onPosition(pos) {
 function geoError(error) {
   if (!state.map) initMap();
 
-  if (error && error.code === 1) {
+  if (error && (error.code === 1 || error.code === "NOT_AUTHORIZED")) {
     toast("Joylashuvga ruxsat berilmadi");
 
     $("#locationModal")?.classList.add("active");
@@ -1201,13 +1217,94 @@ function geoError(error) {
   }
 }
 
+// ------------------------------------------------------------
+// NATIVE (Capacitor) FONDA KUZATUV
+// ------------------------------------------------------------
+//
+// Android/iOS ilova sifatida o'ralganda (Capacitor), oddiy
+// navigator.geolocation.watchPosition ekran o'chganda yoki
+// ilova fonga o'tganda to'xtaydi. Shu sabab native platformada
+// @capacitor-community/background-geolocation ishlatiladi — u
+// doimiy bildirishnoma (sekundomerga o'hshab telefon tepasida
+// turadigan) orqali fonda ham GPS'ni davom ettiradi.
+//
+// Brauzerda (web) hech narsa o'zgarmaydi — pastdagi oddiy
+// watchPosition yo'li ishlaydi.
+// ------------------------------------------------------------
+
+function isNative() {
+  const cap = window.Capacitor;
+  return !!(cap && cap.isNativePlatform && cap.isNativePlatform());
+}
+
+function getBackgroundGeolocation() {
+  const cap = window.Capacitor;
+
+  if (!cap || !cap.registerPlugin) return null;
+
+  if (!state.bgGeo) {
+    state.bgGeo = cap.registerPlugin("BackgroundGeolocation");
+  }
+
+  return state.bgGeo;
+}
+
+async function startNativeWatch() {
+  const plugin = getBackgroundGeolocation();
+
+  if (!plugin) {
+    toast("Fonda kuzatuv plagini topilmadi");
+    return;
+  }
+
+  try {
+    state.watchId = await plugin.addWatcher(
+      {
+        backgroundMessage: "Yurishingiz kuzatilmoqda — bekor qilish uchun bosing.",
+        backgroundTitle: "ZONEX yurish davom etmoqda",
+        requestPermissions: true,
+        stale: false,
+        distanceFilter: 0
+      },
+      (location, error) => {
+        if (error) {
+          geoError(error);
+          return;
+        }
+
+        if (!location) return;
+
+        $("#locationModal")?.classList.remove("active");
+
+        onPosition({
+          coords: {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            accuracy: location.accuracy
+          },
+          timestamp: location.time || Date.now()
+        });
+      }
+    );
+  } catch {
+    state.watchId = null;
+
+    toast("Joylashuv aniqlanmadi — GPS'ni tekshiring");
+  }
+}
+
 function startWatching() {
+  if (state.watchId !== null) return;
+
+  if (isNative()) {
+    startNativeWatch();
+    return;
+  }
+
   if (!navigator.geolocation) {
     toast("Bu brauzerda joylashuv ishlamaydi");
     return;
   }
-
-  if (state.watchId !== null) return;
 
   state.watchId = navigator.geolocation.watchPosition(onPosition, geoError, {
     enableHighAccuracy: true,
@@ -1217,6 +1314,11 @@ function startWatching() {
 }
 
 function requestLocation() {
+  if (isNative()) {
+    startWatching();
+    return;
+  }
+
   if (!navigator.geolocation) {
     toast("Bu brauzerda joylashuv ishlamaydi");
     return;
@@ -1240,6 +1342,11 @@ function requestLocation() {
 
 // Ruxsat allaqachon berilgan bo'lsa — hech narsa so'ramaymiz
 async function ensureLocation() {
+  if (isNative()) {
+    startWatching();
+    return;
+  }
+
   if (!navigator.geolocation) return;
 
   try {
@@ -1469,6 +1576,41 @@ function updateStats() {
   }
 }
 
+// ------------------------------------------------------------
+// EKRAN O'CHMASIN — yurish paytida GPS uzilib qolmasligi uchun.
+//
+// Brauzer tab fon(background)ga o'tsa yoki ekran qulflansa,
+// bu lock avtomatik bekor bo'ladi — shuning uchun sahifa yana
+// ko'rinadigan bo'lganda (visibilitychange) qayta so'raymiz.
+// ------------------------------------------------------------
+
+async function acquireWakeLock() {
+  if (!("wakeLock" in navigator) || !state.active) return;
+
+  try {
+    state.wakeLock = await navigator.wakeLock.request("screen");
+
+    state.wakeLock.addEventListener("release", () => {
+      state.wakeLock = null;
+    });
+  } catch {
+    /* ruxsat yo'q yoki qo'llab-quvvatlanmaydi */
+  }
+}
+
+function releaseWakeLock() {
+  if (state.wakeLock) {
+    state.wakeLock.release().catch(() => {});
+    state.wakeLock = null;
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && state.active) {
+    acquireWakeLock();
+  }
+});
+
 function startWalk() {
   if (!state.name) {
     $("#welcomeModal")?.classList.add("active");
@@ -1497,6 +1639,8 @@ function startWalk() {
 
   clearInterval(state.timer);
   state.timer = setInterval(updateStats, 1000);
+
+  acquireWakeLock();
 
   toast("Yurish boshlandi — yo'lingizni kesib halqa yasang!");
 }
@@ -1679,6 +1823,8 @@ async function finishWalk() {
   state.active = false;
 
   clearInterval(state.timer);
+
+  releaseWakeLock();
 
   speedWarning(false, 0);
 
