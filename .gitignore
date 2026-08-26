@@ -7,6 +7,11 @@ node_modules/
 .vercel/
 npm-debug.log*
 
+# Lokal server bazasi (local-server.js shu yerga yozadi) — haqiqiy
+# o'yinchi ma'lumotlari (ism, rasm, joylashuv) bo'lishi mumkin,
+# git'ga tushmasin.
+world.json
+
 # Native (Capacitor) build artifacts — root fayllardan build:native
 # skripti bilan qayta yaratiladi, git'ga tushmaydi.
 /public/
