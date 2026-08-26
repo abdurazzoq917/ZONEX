@@ -47,4 +47,14 @@
       buni @capacitor-community/background-geolocation o'zi so'raydi.
     -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!--
+      Ilova o'zi yangi APK'ni yuklab, o'rnatish oynasini ochishi
+      uchun (auto-update). Foydalanuvchi baribir "O'rnatish"
+      tugmasini bosishi kerak — Android buni to'liq bypass
+      qilishga ruxsat bermaydi, lekin shu ruxsat bilan o'rnatish
+      oynasi to'g'ridan-to'g'ri ochiladi (Sozlamalarga
+      qaytarilmaydi).
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 </manifest>

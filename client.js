@@ -149,6 +149,43 @@ function saveBig(key, value) {
   }
 }
 
+// ============================================================
+// TUNGI / KUNDUZGI REJIM
+// ============================================================
+//
+// index.html'dagi inline skript sahifa ochilganda darhol
+// (CSS chizilishidan oldin) rejimni qo'yadi — bu yerda faqat
+// tugma bilan almashtirish va saqlash bor.
+// ============================================================
+
+function currentTheme() {
+  const saved = loadStored("zonexTheme");
+
+  if (saved === "light" || saved === "dark") return saved;
+
+  return window.matchMedia &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+
+  const meta = document.querySelector('meta[name="theme-color"]');
+
+  if (meta) meta.setAttribute("content", theme === "dark" ? "#0b0d12" : "#f7f7f9");
+}
+
+function toggleTheme() {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+
+  saveStored("zonexTheme", next);
+  applyTheme(next);
+
+  if (state.profileId) refreshProfile();
+}
+
 function deviceId() {
   let id = loadStored("zonexId");
 
@@ -183,6 +220,12 @@ const state = {
   speed: 0,
   wakeLock: null,
   bgGeo: null,
+  apkInstaller: null,
+  filesystemPlugin: null,
+  appPlugin: null,
+  networkPlugin: null,
+  updateChecking: false,
+  updateDownloading: false,
 
   // yurish
   active: false,
@@ -1368,6 +1411,164 @@ async function ensureLocation() {
 }
 
 // ============================================================
+// AVTO-YANGILANISH (faqat native ilovada)
+// ============================================================
+//
+// Telefon internetga ulanganda (yoki ilova qayta ochilganda)
+// server /version.json'ni tekshiradi. Yangi versiya bo'lsa —
+// APK o'zi yuklab olinadi va Android'ning o'rnatish oynasi
+// ochiladi. Foydalanuvchi baribir "O'rnatish" tugmasini bosishi
+// kerak — bu Android'ning xavfsizlik cheklovi, uni to'liq
+// bypass qilib bo'lmaydi.
+// ============================================================
+
+function getApkInstaller() {
+  const cap = window.Capacitor;
+
+  if (!cap || !cap.registerPlugin) return null;
+
+  if (!state.apkInstaller) state.apkInstaller = cap.registerPlugin("ApkInstaller");
+
+  return state.apkInstaller;
+}
+
+function getFilesystemPlugin() {
+  const cap = window.Capacitor;
+
+  if (!cap || !cap.registerPlugin) return null;
+
+  if (!state.filesystemPlugin) state.filesystemPlugin = cap.registerPlugin("Filesystem");
+
+  return state.filesystemPlugin;
+}
+
+function getAppPlugin() {
+  const cap = window.Capacitor;
+
+  if (!cap || !cap.registerPlugin) return null;
+
+  if (!state.appPlugin) state.appPlugin = cap.registerPlugin("App");
+
+  return state.appPlugin;
+}
+
+function getNetworkPlugin() {
+  const cap = window.Capacitor;
+
+  if (!cap || !cap.registerPlugin) return null;
+
+  if (!state.networkPlugin) state.networkPlugin = cap.registerPlugin("Network");
+
+  return state.networkPlugin;
+}
+
+function arrayBufferToBase64(buffer) {
+  let binary = "";
+
+  const bytes = new Uint8Array(buffer);
+  const chunk = 0x8000;
+
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+
+  return btoa(binary);
+}
+
+async function downloadAndInstallUpdate(release) {
+  if (state.updateDownloading) return;
+
+  state.updateDownloading = true;
+
+  const installer = getApkInstaller();
+  const fs = getFilesystemPlugin();
+
+  if (!installer || !fs) {
+    state.updateDownloading = false;
+    return;
+  }
+
+  try {
+    toast(
+      "Yangi versiya (" +
+        (release.versionName || release.versionCode) +
+        ") yuklanmoqda…"
+    );
+
+    const response = await fetch(API_BASE + release.apkUrl);
+
+    if (!response.ok) throw new Error("apk yuklab bo'lmadi");
+
+    const buffer = await response.arrayBuffer();
+    const base64 = arrayBufferToBase64(buffer);
+
+    await fs.writeFile({
+      path: "zonex-update.apk",
+      directory: "CACHE",
+      data: base64,
+      recursive: true
+    });
+
+    const uriResult = await fs.getUri({
+      path: "zonex-update.apk",
+      directory: "CACHE"
+    });
+
+    toast("Yangilanish tayyor — o'rnatishni tasdiqlang");
+
+    await installer.install({ path: uriResult.uri });
+  } catch {
+    /* internet uzildi yoki rad etildi — keyingi urinishda ketadi */
+  } finally {
+    state.updateDownloading = false;
+  }
+}
+
+async function checkForUpdate() {
+  if (!isNative()) return;
+
+  if (state.updateChecking || state.updateDownloading) return;
+
+  const appPlugin = getAppPlugin();
+
+  if (!appPlugin) return;
+
+  state.updateChecking = true;
+
+  try {
+    const info = await appPlugin.getInfo();
+
+    const installedCode = Number(info.build) || 0;
+
+    const { ok, data } = await api("/version.json");
+
+    if (!ok || !data || !Number.isFinite(Number(data.versionCode))) return;
+
+    if (Number(data.versionCode) > installedCode) {
+      await downloadAndInstallUpdate(data);
+    }
+  } catch {
+    /* internet yo'q yoki server javob bermadi — keyingi safar */
+  } finally {
+    state.updateChecking = false;
+  }
+}
+
+function initAutoUpdate() {
+  if (!isNative()) return;
+
+  checkForUpdate();
+
+  getAppPlugin()?.addListener("appStateChange", (event) => {
+    if (event && event.isActive) checkForUpdate();
+  });
+
+  getNetworkPlugin()?.addListener("networkStatusChange", (status) => {
+    if (status && status.connected) checkForUpdate();
+  });
+}
+
+// ============================================================
 // YURISH
 // ============================================================
 
@@ -2515,6 +2716,13 @@ function openProfile(id) {
     "</div>" +
     friendHtml(player) +
     adminHtml(player) +
+    (isMe
+      ? '<button class="ghost-btn" id="themeToggle" type="button">' +
+        (currentTheme() === "dark"
+          ? "☀️ Kunduzgi rejim"
+          : "🌙 Tungi rejim") +
+        "</button>"
+      : "") +
     '<p class="profile-title">HAR BIR KESISHISH</p>' +
     (zones.length
       ? '<div class="loop-list">' + zones.map(loopRow).join("") + "</div>"
@@ -2714,6 +2922,8 @@ function bindProfileButtons(player, zones) {
   );
 
   $("#chatBtn")?.addEventListener("click", () => openChat(player.id));
+
+  $("#themeToggle")?.addEventListener("click", toggleTheme);
 
   // ---- admin ----
   $("#profileBody")
@@ -3775,6 +3985,8 @@ function bindButtons() {
 
 async function boot() {
   bindButtons();
+
+  initAutoUpdate();
 
   initMap();
 
