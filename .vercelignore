@@ -1,0 +1,27 @@
+# Vercel'ga KERAKMAS narsalar.
+#
+# MUHIM: `public/` bo'lsa, Vercel uni saytning ildizi deb oladi —
+# u yerdagi native-config.js esa telefonning LAN manziliga ulanadi.
+# Shuning uchun `public/` yuklanmaydi va sayt ildizdagi
+# index.html / client.js / styles.css bilan ishlaydi.
+public/
+
+# Native (Android) ilova — serverga aloqasi yo'q, juda katta
+android/
+capacitor.config.json
+
+# Lokal server va yordamchi skriptlar
+local-server.js
+scripts/
+
+# Haqiqiy o'yinchi ma'lumotlari — hech qachon yuklanmasin
+world.json
+.env
+.env.local
+
+# Eski arxivlar va rasmlar
+*.zip
+*.jpg
+*.png
+.vscode/
+.claude/
