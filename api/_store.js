@@ -363,11 +363,27 @@ function overlapArea(a, b) {
   return hits * Math.abs(cellW) * cellH;
 }
 
+// Koordinata haqiqiy sonmi?
+//
+// MUHIM: Number(null), Number(""), Number(false), Number([])
+// hammasi 0 beradi. Shunday qiymat o'tib ketsa, nuqta Afrika
+// yaqinidagi [0, 0] ga tushib, hudud butun yer yuzini qamrab
+// oladi. Shuning uchun tur (type) ham tekshiriladi.
+function coordinate(value) {
+  if (typeof value === "number") return value;
+
+  if (typeof value === "string" && value.trim() !== "") {
+    return Number(value);
+  }
+
+  return NaN;
+}
+
 function validPoint(point) {
   if (!Array.isArray(point) || point.length < 2) return false;
 
-  const lat = Number(point[0]);
-  const lng = Number(point[1]);
+  const lat = coordinate(point[0]);
+  const lng = coordinate(point[1]);
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
   if (lat < -90 || lat > 90) return false;
@@ -382,7 +398,7 @@ function cleanPoints(points) {
   return points
     .filter(validPoint)
     .slice(0, 3000)
-    .map((p) => [Number(p[0]), Number(p[1])]);
+    .map((p) => [coordinate(p[0]), coordinate(p[1])]);
 }
 
 // ============================================================

@@ -108,7 +108,11 @@ function mergeOwn(player, claimGeom) {
 
       const shape = geo.territoryGeom(territory);
 
-      if (!shape.length) return; // buzuq yozuv — tashlab yuboramiz
+      // Buzuq yozuv — qo'shmaymiz, lekin o'chirib ham yubormaymiz
+      if (!shape.length) {
+        rest.push(territory);
+        return;
+      }
 
       const overlaps =
         geo.geomArea(geo.intersection(shape, combined)) > 0;
@@ -181,7 +185,11 @@ function captureFrom(other, claimGeom, claimBox, captured, trimmed) {
 
     const shape = geo.territoryGeom(territory);
 
-    if (!shape.length) return;
+    // Shakli buzuq bo'lsa ham begonaning hududini o'chirib yubormaymiz
+    if (!shape.length) {
+      kept.push(territory);
+      return;
+    }
 
     const shared = geo.geomArea(geo.intersection(shape, claimGeom));
 
