@@ -11,6 +11,8 @@ const { json, preflight, readBody } = require("./_http");
 const {
   readPlayers,
   writePlayers,
+  writeLive,
+  withLock,
   createPlayer,
   normalizeName,
   isNameTaken,
@@ -69,7 +71,19 @@ module.exports = async function handler(req, res) {
         });
       }
 
-      player = createPlayer(id, name);
+      // Yangi akkaunt yaratish — kamdan-kam bo'ladi, qulf ostida
+      player = await withLock("players", async () => {
+        const fresh = await readPlayers();
+
+        if (fresh[id]) return fresh[id];
+
+        const made = createPlayer(id, name);
+
+        await writePlayers(made);
+
+        return made;
+      });
+
       players[id] = player;
     }
 
@@ -103,9 +117,14 @@ module.exports = async function handler(req, res) {
     };
 
     player.online = true;
-    player.updatedAt = now;
 
-    await writePlayers(player);
+    // MUHIM: bu yerda writePlayers CHAQIRILMAYDI.
+    //
+    // Joylashuv har 3 sekundda keladi. Agar u butun o'yinchi
+    // yozuvini qayta yozsa, ayni damda boshqa so'rov egallagan
+    // hudud yo'qolib ketishi mumkin. Shuning uchun joylashuv
+    // o'zining alohida yozuviga tushadi.
+    await writeLive(player);
 
     // ---------------------------------------------------------
     // Javob: butun dunyo

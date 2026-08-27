@@ -11,6 +11,7 @@
 // ============================================================
 
 const { json, preflight, readBody } = require("./_http");
+const { locked } = require("./_lock");
 
 const {
   readPlayers,
@@ -21,7 +22,7 @@ const {
   isNameTaken
 } = require("./_store");
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   if (preflight(req, res)) return;
 
   if (req.method !== "POST") {
@@ -92,3 +93,6 @@ module.exports = async function handler(req, res) {
     });
   }
 };
+
+// Bazani o'zgartiradigan so'rovlar birin-ketin bajariladi
+module.exports = locked("players", handler);

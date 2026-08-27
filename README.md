@@ -44,6 +44,11 @@ ishlaydi.
    bitta hududga aylanadi. Kichigi kattasiga qo'shiladi: nomeri va
    yaratilgan sanasi kattanikidan qoladi, yurilgan masofalar esa
    qo'shiladi. Ustma-ust tushgan joy ikki marta sanalmaydi.
+
+   Ikkisi tegib turmasa (masalan orasida yo'l bo'lsa), ular baribir
+   BITTA hudud bo'ladi — ammo orasidagi yo'lak hech kimga tegishli
+   bo'lmaydi: siz u yerdan yurmagansiz. Xaritada bitta nom ostidagi
+   ikkita shakl bo'lib ko'rinadi.
 8. Reytingda eng katta maydonga ega odam birinchi turadi. Ro'yxatdan
    o'tgan HAR BIR odam reytingda ko'rinadi — hali hudud egallamagan
    bo'lsa ham. 1-, 2- va 3-o'rinlar oltin, kumush va bronza bilan

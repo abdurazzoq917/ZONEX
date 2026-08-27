@@ -11,6 +11,7 @@
 // ============================================================
 
 const { json, preflight, readBody } = require("./_http");
+const { locked } = require("./_lock");
 
 const {
   readPlayers,
@@ -128,15 +129,12 @@ function mergeOwn(player, claimGeom) {
 
       const near = gapToGeom(territory, pieces);
 
-      if (near.gap <= RULES.MERGE_GAP && near.from && near.to) {
+      if (near.gap <= RULES.MERGE_GAP) {
+        // Orasidagi bo'sh yo'lak SIZNIKI EMAS — siz u yerdan
+        // yurmagansiz. Shuning uchun hech narsa "to'ldirilmaydi":
+        // ikkala shakl bitta hudud yozuvining ikki BO'LAGI bo'lib
+        // qoladi (bitta nom, bitta maydon, bitta tarix).
         combined = geo.union(combined, shape);
-
-        // Orada qolgan yo'lakni ingichka bog'lovchi bilan yopamiz,
-        // aks holda ikkita alohida bo'lak bo'lib qolaveradi.
-        combined = geo.union(
-          combined,
-          geo.bridgeGeom(near.to, near.from, 5)
-        );
 
         merged.push(territory);
         joined = true;
@@ -215,32 +213,31 @@ function captureFrom(other, claimGeom, claimBox, captured, trimmed) {
       return;
     }
 
-    const rest = geo.geomPieces(
+    const rest = geo.shapeFromGeom(
       geo.difference(shape, claimGeom),
       RULES.MIN_AREA
     );
 
     // Deyarli hech nima qolmadi
-    if (!rest.length) {
+    if (!rest) {
       captured.push(lost);
       return;
     }
 
-    // Kesilgandan keyin hudud bir necha bo'lakka bo'linib ketishi
-    // mumkin. Eng kattasi eski nomerini saqlaydi.
-    rest.forEach((piece, index) => {
-      kept.push(
-        normalizeTerritory(
-          {
-            ...territory,
-            id: index === 0 ? territory.id : makeTerritoryId(),
-            points: piece.points,
-            holes: piece.holes
-          },
-          other
-        )
-      );
-    });
+    // Kesilgandan keyin hudud bir necha bo'lakka bo'linib
+    // ketishi mumkin — ular o'sha hududning bo'laklari bo'lib
+    // qoladi (nomeri va tarixi saqlanadi).
+    kept.push(
+      normalizeTerritory(
+        {
+          ...territory,
+          points: rest.points,
+          holes: rest.holes,
+          parts: rest.parts
+        },
+        other
+      )
+    );
 
     trimmed.push({
       territoryId: territory.id || null,
@@ -258,7 +255,7 @@ function captureFrom(other, claimGeom, claimBox, captured, trimmed) {
   return touched;
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   if (preflight(req, res)) return;
 
   if (req.method !== "POST") {
@@ -447,48 +444,47 @@ module.exports = async function handler(req, res) {
     // Yangi halqa hammasidan katta bo'lsa — u yangi hudud bo'ladi
     if (host && Number(host.area || 0) < area) host = null;
 
-    const pieces = geo.geomPieces(combined, RULES.MIN_AREA);
+    // Natija — BITTA hudud yozuvi. Ichida bir nechta alohida
+    // bo'lak bo'lishi mumkin (yonma-yon, lekin tegib turmagan
+    // hududlar qo'shilganda yoki sakkiz shaklidagi yo'lda).
+    const shape = geo.shapeFromGeom(combined, RULES.MIN_AREA);
 
-    if (!pieces.length) {
+    if (!shape) {
       return json(res, 400, {
         error: "too_small",
         message: "Hudud juda kichkina — kattaroq aylanma yasang"
       });
     }
 
-    const fresh = pieces.map((piece, index) =>
-      normalizeTerritory(
-        {
-          id:
-            index === 0 && host && host.id ? host.id : makeTerritoryId(),
+    const territory = normalizeTerritory(
+      {
+        id: host && host.id ? host.id : makeTerritoryId(),
 
-          points: piece.points,
-          holes: piece.holes,
+        points: shape.points,
+        holes: shape.holes,
+        parts: shape.parts,
 
-          // Shu hudud uchun jami yurilgan yo'l (metr).
-          distance: index === 0 ? totalDistance : 0,
-          duration: index === 0 ? totalDuration : 0,
+        // Shu hudud uchun jami yurilgan yo'l (metr).
+        distance: totalDistance,
+        duration: totalDuration,
 
-          speed: Math.round(avgSpeed * 10) / 10,
+        speed: Math.round(avgSpeed * 10) / 10,
 
-          mergedCount: index === 0 ? merged.length : 0,
-          capturedCount: index === 0 ? captured.length : 0,
+        mergedCount: merged.length,
+        capturedCount: captured.length,
 
-          createdAt: index === 0 ? createdAt : Date.now()
-        },
-        player
-      )
+        createdAt
+      },
+      player
     );
 
-    player.territories = kept.concat(fresh);
+    player.territories = kept.concat([territory]);
 
     rebuildArea(player);
 
     player.updatedAt = Date.now();
 
     await writePlayers(Array.from(changed.values()));
-
-    const territory = fresh[0];
 
     const now = Date.now();
 
@@ -530,3 +526,6 @@ module.exports = async function handler(req, res) {
     });
   }
 };
+
+// Bazani o'zgartiradigan so'rovlar birin-ketin bajariladi
+module.exports = locked("players", handler);

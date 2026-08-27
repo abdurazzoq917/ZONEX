@@ -41,6 +41,17 @@ const USE_REDIS = Boolean(REDIS_URL && REDIS_TOKEN);
 const IDS_KEY = "zonex:ids";
 const PLAYER_KEY = (id) => "zonex:player:" + id;
 
+// "Jonli" yozuv — joylashuv va jami yurgan masofa.
+//
+// Bu ma'lumot har 3 sekundda yangilanadi, o'yinchi yozuvi esa
+// juda kam o'zgaradi (hudud, do'stlik, rasm). Ilgari ikkalasi
+// bitta yozuvda edi va joylashuv yangilanishi ayni damda
+// egallangan hududni O'CHIRIB yuborishi mumkin edi. Endi ular
+// alohida kalitlarda — bir-biriga tegmaydi.
+const LIVE_KEY = (id) => "zonex:live:" + id;
+
+const LOCK_KEY = (name) => "zonex:lock:" + name;
+
 const FILE_PATH = process.env.VERCEL
   ? path.join("/tmp", "zonex-world.json")
   : path.join(__dirname, "..", "world.json");
@@ -572,12 +583,35 @@ function createPlayer(id, name) {
 // raqam bilan xarita bir-biriga mos keladi.
 // ============================================================
 
-function normalizeTerritory(territory, player) {
-  const points = geo.tidyRing(territory.points);
-
-  const holes = (Array.isArray(territory.holes) ? territory.holes : [])
+function cleanHoles(holes) {
+  return (Array.isArray(holes) ? holes : [])
     .map((hole) => geo.tidyRing(hole))
     .filter((hole) => geo.isRing(hole));
+}
+
+function normalizeTerritory(territory, player) {
+  const points = geo.tidyRing(territory.points);
+  const holes = cleanHoles(territory.holes);
+
+  // Qo'shimcha bo'laklar — yonma-yon, lekin tegib turmagan
+  // hududlar qo'shilganda paydo bo'ladi.
+  const parts = (Array.isArray(territory.parts) ? territory.parts : [])
+    .map((part) => {
+      if (!part) return null;
+
+      const ring = geo.tidyRing(part.points);
+
+      if (!geo.isRing(ring)) return null;
+
+      return { points: ring, holes: cleanHoles(part.holes) };
+    })
+    .filter(Boolean);
+
+  let area = geo.shapeArea(points, holes);
+
+  parts.forEach((part) => {
+    area += geo.shapeArea(part.points, part.holes);
+  });
 
   const out = {
     ...territory,
@@ -585,13 +619,22 @@ function normalizeTerritory(territory, player) {
     ownerId: player.id,
     ownerName: player.name,
     color: player.color,
-    area: Math.round(geo.shapeArea(points, holes))
+    area: Math.round(area)
   };
 
   if (holes.length) {
     out.holes = holes;
   } else {
     delete out.holes;
+  }
+
+  if (parts.length) {
+    // Teshigi yo'q bo'laklarda ortiqcha maydon saqlanmasin
+    out.parts = parts.map((part) =>
+      part.holes.length ? part : { points: part.points }
+    );
+  } else {
+    delete out.parts;
   }
 
   return out;
@@ -801,34 +844,44 @@ async function redisPipeline(commands) {
   return (Array.isArray(data) ? data : [data]).map((row) => row.result);
 }
 
+function parseRow(raw) {
+  if (!raw) return null;
+
+  try {
+    return typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch {
+    return null; // buzilgan yozuvni tashlab ketamiz
+  }
+}
+
 async function redisReadAll() {
   const [ids] = await redisPipeline([["SMEMBERS", IDS_KEY]]);
 
   if (!Array.isArray(ids) || !ids.length) return {};
 
-  const [rows] = await redisPipeline([
-    ["MGET"].concat(ids.map((id) => PLAYER_KEY(id)))
+  // Ikkala MGET bitta HTTP so'rovda ketadi — qo'shimcha kechikish yo'q
+  const [rows, liveRows] = await redisPipeline([
+    ["MGET"].concat(ids.map((id) => PLAYER_KEY(id))),
+    ["MGET"].concat(ids.map((id) => LIVE_KEY(id)))
   ]);
 
   const players = {};
 
   ids.forEach((id, index) => {
-    const raw = rows && rows[index];
+    const player = parseRow(rows && rows[index]);
 
-    if (!raw) return;
+    if (!player || !player.id) return;
 
-    try {
-      const player = typeof raw === "string" ? JSON.parse(raw) : raw;
+    applyLive(player, parseRow(liveRows && liveRows[index]));
 
-      if (player && player.id) {
-        players[String(player.id)] = player;
-      }
-    } catch {
-      /* buzilgan yozuvni tashlab ketamiz */
-    }
+    players[String(player.id)] = player;
   });
 
   return players;
+}
+
+async function redisWriteLive(id, live) {
+  await redisPipeline([["SET", LIVE_KEY(id), JSON.stringify(live)]]);
 }
 
 async function redisWrite(players) {
@@ -868,25 +921,83 @@ function fileWriteRaw(data) {
   }
 }
 
+// ============================================================
+// "JONLI" YOZUV (joylashuv + jami yurgan masofa)
+// ============================================================
+//
+// O'yinchi yozuvida ham eski nusxasi qolib ketaveradi — u
+// zaxira bo'lib xizmat qiladi. O'qishda esa HAR DOIM jonli
+// yozuv ustun turadi, chunki u yangiroq.
+// ============================================================
+
+function applyLive(player, live) {
+  if (!player || !live) return player;
+
+  if (
+    Number.isFinite(Number(live.lat)) &&
+    Number.isFinite(Number(live.lng))
+  ) {
+    player.location = {
+      lat: Number(live.lat),
+      lng: Number(live.lng),
+      accuracy: Number.isFinite(Number(live.accuracy))
+        ? Number(live.accuracy)
+        : null,
+      time: Number(live.time) || 0,
+      updatedAt: Number(live.time) || 0
+    };
+  }
+
+  if (Number.isFinite(Number(live.totalDistance))) {
+    player.totalDistance = Number(live.totalDistance);
+  }
+
+  return player;
+}
+
+function liveOf(player) {
+  const location = player && player.location ? player.location : null;
+
+  return {
+    lat: location ? location.lat : null,
+    lng: location ? location.lng : null,
+    accuracy: location ? location.accuracy : null,
+    time: location ? Number(location.time) || 0 : 0,
+    totalDistance: Number(player && player.totalDistance) || 0
+  };
+}
+
 function fileReadAll() {
   const raw = fileReadRaw();
 
+  const live = raw.live && typeof raw.live === "object" ? raw.live : {};
+
+  const players = {};
+
   // Eski format: { players: [ ... ] }
   if (Array.isArray(raw.players)) {
-    const players = {};
-
     raw.players.forEach((p) => {
       if (p && p.id) players[String(p.id)] = p;
     });
-
-    return players;
+  } else if (raw.players && typeof raw.players === "object") {
+    Object.assign(players, raw.players);
   }
 
-  if (raw.players && typeof raw.players === "object") {
-    return raw.players;
-  }
+  Object.keys(players).forEach((id) => {
+    applyLive(players[id], live[id]);
+  });
 
-  return {};
+  return players;
+}
+
+function fileWriteLive(id, live) {
+  const raw = fileReadRaw();
+
+  if (!raw.live || typeof raw.live !== "object") raw.live = {};
+
+  raw.live[String(id)] = live;
+
+  fileWriteRaw(raw);
 }
 
 function fileWriteAll(players) {
@@ -935,6 +1046,121 @@ async function writePlayers(changed) {
   });
 
   fileWriteAll(all);
+}
+
+// Joylashuvni yozadi. O'YINCHI YOZUVIGA UMUMAN TEGMAYDI —
+// shuning uchun ayni damda egallanayotgan hududni o'chira olmaydi.
+async function writeLive(player) {
+  if (!player || player.id == null) return;
+
+  const live = liveOf(player);
+
+  if (USE_REDIS) {
+    await redisWriteLive(String(player.id), live);
+    return;
+  }
+
+  fileWriteLive(String(player.id), live);
+}
+
+// ============================================================
+// QULF (LOCK) — bir vaqtda kelgan o'zgarishlar uchun
+// ============================================================
+//
+// Har bir so'rov butun bazani o'qib, o'zgartirib, qayta yozadi.
+// Ikki odam bir soniyada bir hududga da'vo qilsa, keyingi yozuv
+// birinchisini bosib ketishi mumkin edi — bitta bosib olish
+// yo'qolardi.
+//
+// Endi hududni o'zgartiradigan amallar navbatga qo'yiladi:
+//
+//   - Redis bo'lsa: umumiy (barcha serverlar uchun) qulf,
+//     o'zi ochiladigan muddat bilan — server o'lib qolsa ham
+//     qulf abadiy qotib qolmaydi;
+//   - fayl bo'lsa: bitta jarayon ichidagi navbat yetarli.
+//
+// Qulf ololmasak — 503 qaytadi va klient hududni saqlab turib
+// o'zi qayta yuboradi (flushPending).
+// ============================================================
+
+const LOCK_TTL_MS = 8000;
+const LOCK_TRIES = 40;
+const LOCK_WAIT_MS = 70;
+
+let localQueue = Promise.resolve();
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Qulfni faqat EGASI ochadi (muddati o'tib boshqa birov olgan
+// bo'lsa, uni ochib yubormaymiz).
+const UNLOCK_SCRIPT =
+  "if redis.call('get', KEYS[1]) == ARGV[1] then " +
+  "return redis.call('del', KEYS[1]) else return 0 end";
+
+async function redisAcquire(key, token) {
+  const [result] = await redisPipeline([
+    ["SET", key, token, "NX", "PX", String(LOCK_TTL_MS)]
+  ]);
+
+  return result === "OK";
+}
+
+async function redisRelease(key, token) {
+  try {
+    await redisPipeline([["EVAL", UNLOCK_SCRIPT, "1", key, token]]);
+  } catch {
+    /* muddati o'zi tugaydi */
+  }
+}
+
+async function withLock(name, fn) {
+  if (!USE_REDIS) {
+    // Bitta jarayon — oddiy navbat yetarli
+    const run = localQueue.then(() => fn());
+
+    localQueue = run.then(
+      () => undefined,
+      () => undefined
+    );
+
+    return run;
+  }
+
+  const key = LOCK_KEY(name);
+
+  const token =
+    Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+
+  for (let i = 0; i < LOCK_TRIES; i++) {
+    let taken = false;
+
+    try {
+      taken = await redisAcquire(key, token);
+    } catch (error) {
+      // Redis javob bermayapti — qulfsiz davom etgandan ko'ra
+      // ochiq xato qaytargan yaxshi
+      error.status = 503;
+      throw error;
+    }
+
+    if (taken) {
+      try {
+        return await fn();
+      } finally {
+        await redisRelease(key, token);
+      }
+    }
+
+    await sleep(LOCK_WAIT_MS);
+  }
+
+  const busy = new Error("Server band — birozdan keyin qayta urinamiz");
+
+  busy.status = 503;
+
+  throw busy;
 }
 
 async function getWorld(viewerId) {
@@ -1031,6 +1257,8 @@ module.exports = {
   // saqlash
   readPlayers,
   writePlayers,
+  writeLive,
+  withLock,
   getWorld,
 
   // suhbat

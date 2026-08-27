@@ -22,6 +22,7 @@
 // ============================================================
 
 const { json, preflight, readBody } = require("./_http");
+const { locked } = require("./_lock");
 
 const {
   readPlayers,
@@ -34,7 +35,7 @@ const {
 // Faqat oddiy rasm formatlari
 const ALLOWED = /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/;
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   if (preflight(req, res)) return;
 
   // ---------------------------------------------------------
@@ -154,3 +155,6 @@ module.exports = async function handler(req, res) {
     });
   }
 };
+
+// Bazani o'zgartiradigan so'rovlar birin-ketin bajariladi
+module.exports = locked("players", handler);

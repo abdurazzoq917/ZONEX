@@ -1,6 +1,6 @@
 {
-  "versionCode": 3,
-  "versionName": "1.2",
+  "versionCode": 4,
+  "versionName": "1.3",
   "apkUrl": "/releases/zonex-latest.apk",
-  "notes": "Hududlar endi haqiqiy kesiladi: birov yeringizdan yursa o'sha bo'lak undan ketadi. Yonma-yon hududlaringiz bitta bo'lib qo'shiladi. Tungi rejim olib tashlandi."
+  "notes": "Bir vaqtda kelgan da'volar endi bir-birini o'chirmaydi. Yonma-yon hududlar qo'shilganda orasidagi yurilmagan yo'lak endi hisobga qo'shilmaydi."
 }

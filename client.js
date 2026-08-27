@@ -590,6 +590,8 @@ function zoneStamp(territory, player, isMe) {
     String(Math.round(Number(territory.area) || 0)) +
     "/" +
     String(holesOf(territory).length) +
+    "/" +
+    String(partsOf(territory).length) +
     ":" +
     player.name +
     ":" +
@@ -605,11 +607,39 @@ function holesOf(territory) {
   return territory && Array.isArray(territory.holes) ? territory.holes : [];
 }
 
-// Leaflet uchun shakl: teshiklari bo'lsa — halqalar ro'yxati
+// Hududning qo'shimcha bo'laklari.
+//
+// Yonma-yon, lekin bir-biriga TEGIB TURMAGAN hududlar
+// qo'shilganda hosil bo'ladi: ular bitta hudud (bitta nom,
+// bitta maydon) bo'lib, ammo orasidagi yurilmagan yo'lak
+// hech kimga tegishli bo'lmaydi.
+function partsOf(territory) {
+  return territory && Array.isArray(territory.parts) ? territory.parts : [];
+}
+
+// Bitta bo'lak: teshiklari bo'lsa — halqalar ro'yxati
+function pieceShape(points, holes) {
+  const rings = Array.isArray(holes) ? holes : [];
+
+  return rings.length ? [points].concat(rings) : [points];
+}
+
+// Leaflet uchun shakl.
+//
+//   oddiy hudud        -> [[lat,lng], ...]
+//   teshikli hudud     -> [tashqi, teshik, ...]
+//   ko'p bo'lakli      -> [[tashqi, teshik], [tashqi2], ...]
 function zoneShape(territory) {
   const holes = holesOf(territory);
+  const parts = partsOf(territory);
 
-  return holes.length ? [territory.points].concat(holes) : territory.points;
+  if (!parts.length) {
+    return holes.length ? [territory.points].concat(holes) : territory.points;
+  }
+
+  return [pieceShape(territory.points, holes)].concat(
+    parts.map((part) => pieceShape(part.points, part.holes))
+  );
 }
 
 // Hududning ustidagi yozuv o'zgardimi (user, masofa, rasm, toj)

@@ -152,24 +152,74 @@ function ringGeom(points) {
   return [[scaleRing(ring)]];
 }
 
-function territoryGeom(territory) {
-  if (!territory) return [];
+// Bitta bo'lakni (tashqi chiziq + teshiklar) geom shakliga
+function pieceGeom(points, holes) {
+  const outer = tidyRing(points);
 
-  const outer = tidyRing(territory.points);
-
-  if (!isRing(outer)) return [];
+  if (!isRing(outer)) return null;
 
   const poly = [scaleRing(outer)];
 
-  if (Array.isArray(territory.holes)) {
-    territory.holes.forEach((hole) => {
+  if (Array.isArray(holes)) {
+    holes.forEach((hole) => {
       const clean = tidyRing(hole);
 
       if (isRing(clean)) poly.push(scaleRing(clean));
     });
   }
 
-  return [poly];
+  return poly;
+}
+
+// Hudud bir nechta ALOHIDA bo'lakdan iborat bo'lishi mumkin
+// (yonma-yon, lekin tegib turmagan hududlar qo'shilganda).
+function territoryGeom(territory) {
+  if (!territory) return [];
+
+  const polys = [];
+
+  const main = pieceGeom(territory.points, territory.holes);
+
+  if (main) polys.push(main);
+
+  if (Array.isArray(territory.parts)) {
+    territory.parts.forEach((part) => {
+      if (!part) return;
+
+      const poly = pieceGeom(part.points, part.holes);
+
+      if (poly) polys.push(poly);
+    });
+  }
+
+  return polys;
+}
+
+// geom -> hudud yozuvi uchun shakl.
+//
+// Eng katta bo'lak `points` / `holes` bo'lib qoladi (eski
+// ilovalar shuni o'qiydi), qolganlari `parts` ga tushadi.
+function shapeFromGeom(geom, minArea) {
+  const pieces = geomPieces(geom, minArea);
+
+  if (!pieces.length) return null;
+
+  const main = pieces[0];
+
+  const shape = {
+    points: main.points,
+    holes: main.holes,
+    area: pieces.reduce((sum, piece) => sum + piece.area, 0)
+  };
+
+  if (pieces.length > 1) {
+    shape.parts = pieces.slice(1).map((piece) => ({
+      points: piece.points,
+      holes: piece.holes
+    }));
+  }
+
+  return shape;
 }
 
 // polygon-clipping ba'zan buzuq (o'z-o'zini kesib ketgan)
@@ -441,62 +491,6 @@ function ringGap(a, b) {
   return best;
 }
 
-// ============================================================
-// KO'PRIK — biroz uzoqroq turgan ikki hududni ulash uchun
-// ============================================================
-//
-// Ikki hudud tegib turmasa ham (masalan orasida 10 metrlik
-// yo'lak bo'lsa) ular "yonma-yon" hisoblanadi va bitta
-// hududga aylanadi. Buning uchun ular orasiga ingichka
-// bog'lovchi shakl qo'yiladi.
-// ============================================================
-
-function bridgeGeom(from, to, width) {
-  if (!from || !to) return [];
-
-  const midLat = ((Number(from[0]) + Number(to[0])) / 2 * Math.PI) / 180;
-
-  const kx = 111320 * Math.cos(midLat) || 1;
-  const ky = 110540;
-
-  const dx = (Number(to[1]) - Number(from[1])) * kx;
-  const dy = (Number(to[0]) - Number(from[0])) * ky;
-
-  const len = Math.hypot(dx, dy);
-
-  if (!len) return [];
-
-  const half = Math.max(2, Number(width) || 6) / 2;
-
-  // Ko'prik ikkala hudud ICHIGA biroz kirib borsin — aks holda
-  // faqat chetiga tegib, birlashish hosil bo'lmaydi.
-  const grow = 3;
-
-  const ux = dx / len;
-  const uy = dy / len;
-
-  // perpendikulyar
-  const nx = -uy;
-  const ny = ux;
-
-  const startX = Number(from[1]) * kx - ux * grow;
-  const startY = Number(from[0]) * ky - uy * grow;
-
-  const endX = Number(to[1]) * kx + ux * grow;
-  const endY = Number(to[0]) * ky + uy * grow;
-
-  const corners = [
-    [startX + nx * half, startY + ny * half],
-    [endX + nx * half, endY + ny * half],
-    [endX - nx * half, endY - ny * half],
-    [startX - nx * half, startY - ny * half]
-  ];
-
-  const ring = corners.map((c) => [c[1] / ky, c[0] / kx]);
-
-  return ringGeom(ring);
-}
-
 module.exports = {
   SCALE,
 
@@ -507,7 +501,9 @@ module.exports = {
   shapeArea,
 
   ringGeom,
+  pieceGeom,
   territoryGeom,
+  shapeFromGeom,
 
   union,
   difference,
@@ -523,6 +519,5 @@ module.exports = {
 
   distanceMeters,
   closestOnSegment,
-  ringGap,
-  bridgeGeom
+  ringGap
 };
