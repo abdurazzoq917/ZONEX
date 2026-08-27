@@ -149,43 +149,6 @@ function saveBig(key, value) {
   }
 }
 
-// ============================================================
-// TUNGI / KUNDUZGI REJIM
-// ============================================================
-//
-// index.html'dagi inline skript sahifa ochilganda darhol
-// (CSS chizilishidan oldin) rejimni qo'yadi — bu yerda faqat
-// tugma bilan almashtirish va saqlash bor.
-// ============================================================
-
-function currentTheme() {
-  const saved = loadStored("zonexTheme");
-
-  if (saved === "light" || saved === "dark") return saved;
-
-  return window.matchMedia &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-}
-
-function applyTheme(theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-
-  const meta = document.querySelector('meta[name="theme-color"]');
-
-  if (meta) meta.setAttribute("content", theme === "dark" ? "#0b0d12" : "#f7f7f9");
-}
-
-function toggleTheme() {
-  const next = currentTheme() === "dark" ? "light" : "dark";
-
-  saveStored("zonexTheme", next);
-  applyTheme(next);
-
-  if (state.profileId) refreshProfile();
-}
-
 function deviceId() {
   let id = loadStored("zonexId");
 
@@ -619,7 +582,14 @@ function playerMarker(player) {
 
 function zoneStamp(territory, player, isMe) {
   return (
+    // Shakl o'zgarganda (birov bir bo'lagini kesib olganda yoki
+    // ikki hudud qo'shilib ketganda) qayta chizilishi kerak —
+    // shuning uchun maydon va teshiklar ham belgiga kiradi.
     String(territory.points.length) +
+    "/" +
+    String(Math.round(Number(territory.area) || 0)) +
+    "/" +
+    String(holesOf(territory).length) +
     ":" +
     player.name +
     ":" +
@@ -627,6 +597,19 @@ function zoneStamp(territory, player, isMe) {
     ":" +
     (isMe ? "1" : "0")
   );
+}
+
+// Hudud ichidan o'yib olingan joylar (birov o'rtasidan aylanib
+// o'tsa paydo bo'ladi). Eski hududlarda bo'lmaydi.
+function holesOf(territory) {
+  return territory && Array.isArray(territory.holes) ? territory.holes : [];
+}
+
+// Leaflet uchun shakl: teshiklari bo'lsa — halqalar ro'yxati
+function zoneShape(territory) {
+  const holes = holesOf(territory);
+
+  return holes.length ? [territory.points].concat(holes) : territory.points;
 }
 
 // Hududning ustidagi yozuv o'zgardimi (user, masofa, rasm, toj)
@@ -711,7 +694,7 @@ function zoneLabelHtml(territory, player) {
 function drawZone(key, territory, player, isMe) {
   const color = player.color || colorFromId(player.id);
 
-  const polygon = L.polygon(territory.points, {
+  const polygon = L.polygon(zoneShape(territory), {
     color,
     fillColor: color,
     fillOpacity: isMe ? 0.32 : 0.2,
@@ -1997,21 +1980,30 @@ async function claimArea(ring, walked, duration) {
 
   const km = (walked / 1000).toFixed(2);
 
-  if (data.captured && data.captured.length) {
-    const names = data.captured.map((c) => "@" + c.ownerName).join(", ");
+  // Kimdan nima olingani / nima qo'shilgani
+  const news = [];
 
-    toast(
-      "+" +
-        saved.toLocaleString() +
-        " m² (" +
-        km +
-        " km) · " +
-        names +
-        " hududi bosib olindi!"
-    );
-  } else {
-    toast("+" + saved.toLocaleString() + " m² · " + km + " km — sizniki!");
+  const taken = []
+    .concat(data.captured || [])
+    .concat(data.trimmed || [])
+    .map((c) => "@" + c.ownerName);
+
+  if (taken.length) {
+    news.push(Array.from(new Set(taken)).join(", ") + " hududidan olindi");
   }
+
+  if (Number(data.merged) > 0) {
+    news.push(data.merged + " ta hududingiz qo'shilib ketdi");
+  }
+
+  toast(
+    "+" +
+      saved.toLocaleString() +
+      " m² · " +
+      km +
+      " km" +
+      (news.length ? " · " + news.join(", ") : " — sizniki!")
+  );
 }
 
 // ------------------------------------------------------------
@@ -2716,13 +2708,6 @@ function openProfile(id) {
     "</div>" +
     friendHtml(player) +
     adminHtml(player) +
-    (isMe
-      ? '<button class="ghost-btn" id="themeToggle" type="button">' +
-        (currentTheme() === "dark"
-          ? "☀️ Kunduzgi rejim"
-          : "🌙 Tungi rejim") +
-        "</button>"
-      : "") +
     '<p class="profile-title">HAR BIR KESISHISH</p>' +
     (zones.length
       ? '<div class="loop-list">' + zones.map(loopRow).join("") + "</div>"
@@ -2923,8 +2908,6 @@ function bindProfileButtons(player, zones) {
 
   $("#chatBtn")?.addEventListener("click", () => openChat(player.id));
 
-  $("#themeToggle")?.addEventListener("click", toggleTheme);
-
   // ---- admin ----
   $("#profileBody")
     ?.querySelectorAll("[data-ban]")
@@ -2940,7 +2923,7 @@ function showTerritory(territory) {
   if (!state.map || !territory || !Array.isArray(territory.points)) return;
 
   try {
-    state.map.fitBounds(L.polygon(territory.points).getBounds(), {
+    state.map.fitBounds(L.polygon(zoneShape(territory)).getBounds(), {
       padding: [50, 50],
       maxZoom: 18
     });

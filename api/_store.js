@@ -24,6 +24,8 @@ require("./_env");
 const fs = require("fs");
 const path = require("path");
 
+const geo = require("./_geo");
+
 const REDIS_URL =
   process.env.KV_REST_API_URL ||
   process.env.UPSTASH_REDIS_REST_URL ||
@@ -67,6 +69,11 @@ const RULES = {
   // yangi egasiga o'tadi. To'liq aylanib o'tilsa (ichiga olinsa)
   // qamrov 1 ga teng bo'ladi va hudud albatta qo'lga o'tadi.
   CAPTURE_RATIO: 0.5,
+
+  // Yonma-yon hududlar shu masofadan yaqin bo'lsa (metr) —
+  // bitta hududga qo'shilib ketadi. Ikkita halqa aynan tegib
+  // turmasa ham (orasida tor yo'lak qolsa ham) birlashadi.
+  MERGE_GAP: 25,
 
   // Username uzunligi
   NAME_MIN: 3,
@@ -537,6 +544,43 @@ function createPlayer(id, name) {
   };
 }
 
+// ============================================================
+// HUDUD YOZUVI
+// ============================================================
+//
+// Hudud tashqi chiziq (`points`) va ixtiyoriy ravishda ichidan
+// o'yib olingan joylardan (`holes`) iborat. Teshik boshqa odam
+// hududingizning o'rtasini aylanib olganda paydo bo'ladi.
+//
+// Maydon HAR DOIM shakldan qayta hisoblanadi — shu tufayli
+// raqam bilan xarita bir-biriga mos keladi.
+// ============================================================
+
+function normalizeTerritory(territory, player) {
+  const points = geo.tidyRing(territory.points);
+
+  const holes = (Array.isArray(territory.holes) ? territory.holes : [])
+    .map((hole) => geo.tidyRing(hole))
+    .filter((hole) => geo.isRing(hole));
+
+  const out = {
+    ...territory,
+    points,
+    ownerId: player.id,
+    ownerName: player.name,
+    color: player.color,
+    area: Math.round(geo.shapeArea(points, holes))
+  };
+
+  if (holes.length) {
+    out.holes = holes;
+  } else {
+    delete out.holes;
+  }
+
+  return out;
+}
+
 function normalizePlayer(player, id) {
   if (!player || typeof player !== "object") {
     return createPlayer(id, "");
@@ -557,13 +601,7 @@ function normalizePlayer(player, id) {
 
   player.territories = player.territories
     .filter((t) => t && Array.isArray(t.points) && t.points.length >= 3)
-    .map((t) => ({
-      ...t,
-      ownerId: player.id,
-      ownerName: player.name,
-      color: player.color,
-      area: Number(t.area) || 0
-    }));
+    .map((t) => normalizeTerritory(t, player));
 
   if (!Number.isFinite(Number(player.totalDistance))) {
     player.totalDistance = 0;
@@ -988,6 +1026,7 @@ module.exports = {
   // model
   createPlayer,
   normalizePlayer,
+  normalizeTerritory,
   publicPlayer,
   publicList,
   rebuildArea,
@@ -1016,6 +1055,9 @@ module.exports = {
   centroid,
   cleanPoints,
   validPoint,
+
+  // aniq geometriya (union / difference / intersection)
+  geo,
 
   USE_REDIS
 };

@@ -32,17 +32,25 @@ ishlaydi.
    o'zi serverga yuboriladi.
 5. Hududlar serverda saqlanadi — chiqib qayta kirsangiz ham joyida qoladi.
 6. Boshqa odamning hududini aylanib o'tsangiz — **bosib olasiz**:
-   - hududning yarmidan ko'pi (yoki butunlay) ichida qolsa, u sizga o'tadi;
-   - qisman ustidan yursangiz, faqat siz yurib o'tgan qism sizga o'tadi va
-     eski egasining maydonidan chiqariladi (bir joy ikki marta sanalmaydi);
+   - hududning yarmidan ko'pi (yoki butunlay) ichida qolsa, u butunlay
+     sizga o'tadi va uning xaritasidan yo'qoladi;
+   - qisman ustidan yursangiz, hududning **shakli haqiqatda kesiladi**:
+     siz yurib o'tgan bo'lak eski egasidan olinadi, qolgani unda qoladi.
+     O'rtasidan aylanib o'tsangiz — o'sha joyda teshik paydo bo'ladi;
+   - o'zgarish darhol HAMMANING xaritasida ko'rinadi;
    - yeringizni qaytarib olish uchun o'sha joydan qayta aylaning.
-7. Reytingda eng katta maydonga ega odam birinchi turadi. Ro'yxatdan
+7. **Yonma-yon hududlaringiz o'zi qo'shilib ketadi.** Yangi halqa eski
+   hududingizga tegib tursa yoki 25 metrgacha yaqin bo'lsa — ikkalasi
+   bitta hududga aylanadi. Kichigi kattasiga qo'shiladi: nomeri va
+   yaratilgan sanasi kattanikidan qoladi, yurilgan masofalar esa
+   qo'shiladi. Ustma-ust tushgan joy ikki marta sanalmaydi.
+8. Reytingda eng katta maydonga ega odam birinchi turadi. Ro'yxatdan
    o'tgan HAR BIR odam reytingda ko'rinadi — hali hudud egallamagan
    bo'lsa ham. 1-, 2- va 3-o'rinlar oltin, kumush va bronza bilan
    ajratib ko'rsatiladi.
-8. **Tezlik cheklovi: 23 km/soat.** O'rtacha yoki bir lahzalik tezlik
+9. **Tezlik cheklovi: 23 km/soat.** O'rtacha yoki bir lahzalik tezlik
    shundan oshsa — nuqtalar yozilmaydi va ogohlantirish chiqadi.
-9. Xaritadagi odamning, uning hududining, reyting qatorining yoki jonli
+10. Xaritadagi odamning, uning hududining, reyting qatorining yoki jonli
    ro'yxatdagi nomining ustiga bossangiz — **profili** ochiladi: jami
    necha m² hududi bor va har bir kesishishda necha km yurgani ko'rinadi.
 10. **Eng katta hududga ega odam** username'i ustida 👑 toj turadi —

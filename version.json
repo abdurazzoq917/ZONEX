@@ -1,6 +1,6 @@
 {
-  "versionCode": 2,
-  "versionName": "1.1",
+  "versionCode": 3,
+  "versionName": "1.2",
   "apkUrl": "/releases/zonex-latest.apk",
-  "notes": "Fon rejimida GPS kuzatuv, chat to'liq ekranda, tungi/kunduzgi rejim, avto-yangilanish"
+  "notes": "Hududlar endi haqiqiy kesiladi: birov yeringizdan yursa o'sha bo'lak undan ketadi. Yonma-yon hududlaringiz bitta bo'lib qo'shiladi. Tungi rejim olib tashlandi."
 }
