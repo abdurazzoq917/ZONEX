@@ -27,6 +27,8 @@ const { locked } = require("./_lock");
 const {
   readPlayers,
   writePlayers,
+  readAvatar,
+  writeAvatar,
   applyBan,
   banInfo,
   RULES
@@ -53,15 +55,14 @@ async function handler(req, res) {
       return json(res, 400, { error: "Qurilma ID kerak" });
     }
 
-    const players = await readPlayers();
-
-    const player = players[id];
+    // Butun dunyoni emas — faqat shu odamning rasmini o'qiymiz
+    const record = await readAvatar(id);
 
     return json(res, 200, {
       ok: true,
       id,
-      avatar: (player && player.avatar) || "",
-      avatarAt: (player && player.avatarAt) || 0
+      avatar: record.avatar || "",
+      avatarAt: Number(record.avatarAt) || 0
     });
   }
 
@@ -94,12 +95,15 @@ async function handler(req, res) {
 
     // ---- rasmni o'chirish ----
     if (!avatar) {
-      player.avatar = "";
+      await writeAvatar(id, "", 0);
+
       player.avatarAt = 0;
+
+      delete player.avatar;
 
       await writePlayers(player);
 
-      return json(res, 200, { ok: true, removed: true, player });
+      return json(res, 200, { ok: true, removed: true, avatarAt: 0 });
     }
 
     if (avatar.length > RULES.AVATAR_MAX) {
@@ -136,8 +140,12 @@ async function handler(req, res) {
       });
     }
 
-    player.avatar = avatar;
     player.avatarAt = Date.now();
+
+    // Rasmning o'zi alohida kalitga, o'yinchi yozuviga faqat versiya
+    await writeAvatar(id, avatar, player.avatarAt);
+
+    delete player.avatar;
 
     await writePlayers(player);
 

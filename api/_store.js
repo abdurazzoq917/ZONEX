@@ -50,6 +50,17 @@ const PLAYER_KEY = (id) => "zonex:player:" + id;
 // alohida kalitlarda — bir-biriga tegmaydi.
 const LIVE_KEY = (id) => "zonex:live:" + id;
 
+// Profil rasmi ham ALOHIDA kalitda.
+//
+// Rasm o'yinchi yozuvining ~98% ini egallaydi, lekin u faqat
+// profil ochilganda kerak. Ilgari u o'yinchi yozuvi ichida edi
+// va HAR BIR /api/world so'rovida (har 3 sekundda) bazadan
+// o'qilardi — keyin javobdan olib tashlanardi. Ya'ni bekorga.
+//
+// Endi o'yinchi yozuvida faqat `avatarAt` (versiya raqami)
+// qoladi, rasmning o'zi esa shu kalitda yotadi.
+const AVATAR_KEY = (id) => "zonex:avatar:" + id;
+
 const LOCK_KEY = (name) => "zonex:lock:" + name;
 
 const FILE_PATH = process.env.VERCEL
@@ -550,8 +561,7 @@ function createPlayer(id, name) {
     territories: [],
     totalDistance: 0,
 
-    // profil
-    avatar: "",
+    // profil (rasmning o'zi alohida kalitda — bu yerda versiya)
     avatarAt: 0,
 
     // moderatsiya
@@ -697,16 +707,19 @@ function normalizePlayer(player, id) {
   );
 
   // ---- profil rasmi ----
-  player.avatar =
-    typeof player.avatar === "string" &&
-    player.avatar.startsWith("data:image/") &&
-    player.avatar.length <= RULES.AVATAR_MAX
-      ? player.avatar
-      : "";
-
+  //
+  // Bu yerda faqat VERSIYA bor. Rasmning o'zi alohida kalitda
+  // yotadi va /api/avatar orqali bir marta olinadi.
+  //
+  // Eski yozuvlarda rasm ichida qolgan bo'lishi mumkin — u
+  // birinchi yozuvda o'z kalitiga ko'chiriladi (writePlayers).
   player.avatarAt = Number(player.avatarAt) || 0;
 
-  if (!player.avatar) player.avatarAt = 0;
+  if (typeof player.avatar !== "string" || !player.avatar) {
+    delete player.avatar;
+  } else if (!player.avatarAt) {
+    player.avatarAt = Number(player.createdAt) || Date.now();
+  }
 
   // ---- moderatsiya ----
   player.role = isAdminName(player.name) ? "admin" : "user";
@@ -765,7 +778,7 @@ function publicPlayer(player, viewerId) {
     totalDistance: player.totalDistance,
 
     avatarAt: player.avatarAt,
-    hasAvatar: Boolean(player.avatar),
+    hasAvatar: Number(player.avatarAt) > 0,
 
     role: player.role,
     ban: banInfo(player),
@@ -1034,6 +1047,16 @@ async function writePlayers(changed) {
     player.updatedAt = Date.now();
   });
 
+  // Eski yozuvlarda rasm ichida qolgan bo'lsa — o'z kalitiga
+  // ko'chiramiz va o'yinchi yozuvidan olib tashlaymiz.
+  for (const player of clean) {
+    if (typeof player.avatar === "string" && player.avatar) {
+      await writeAvatar(player.id, player.avatar, player.avatarAt);
+    }
+
+    delete player.avatar;
+  }
+
   if (USE_REDIS) {
     await redisWrite(clean);
     return;
@@ -1046,6 +1069,76 @@ async function writePlayers(changed) {
   });
 
   fileWriteAll(all);
+}
+
+// ============================================================
+// PROFIL RASMI — alohida kalitda
+// ============================================================
+
+async function redisGet(key) {
+  const [raw] = await redisPipeline([["GET", key]]);
+
+  return raw;
+}
+
+// Rasmni o'qish. Eski (ko'chirilmagan) yozuvlar uchun
+// o'yinchi yozuvining ichiga ham qaraydi.
+async function readAvatar(id) {
+  const key = String(id);
+
+  if (USE_REDIS) {
+    const own = parseRow(await redisGet(AVATAR_KEY(key)));
+
+    if (own && typeof own.avatar === "string") return own;
+
+    const player = parseRow(await redisGet(PLAYER_KEY(key)));
+
+    if (player && typeof player.avatar === "string" && player.avatar) {
+      return { avatar: player.avatar, avatarAt: Number(player.avatarAt) || 0 };
+    }
+
+    return { avatar: "", avatarAt: 0 };
+  }
+
+  const raw = fileReadRaw();
+
+  const own = raw.avatars && raw.avatars[key];
+
+  if (own && typeof own.avatar === "string") return own;
+
+  const all = Array.isArray(raw.players)
+    ? raw.players.find((p) => p && String(p.id) === key)
+    : raw.players && raw.players[key];
+
+  if (all && typeof all.avatar === "string" && all.avatar) {
+    return { avatar: all.avatar, avatarAt: Number(all.avatarAt) || 0 };
+  }
+
+  return { avatar: "", avatarAt: 0 };
+}
+
+async function writeAvatar(id, avatar, avatarAt) {
+  const key = String(id);
+
+  const record = {
+    avatar: String(avatar || ""),
+    avatarAt: Number(avatarAt) || 0
+  };
+
+  if (USE_REDIS) {
+    await redisPipeline([["SET", AVATAR_KEY(key), JSON.stringify(record)]]);
+    return record;
+  }
+
+  const raw = fileReadRaw();
+
+  if (!raw.avatars || typeof raw.avatars !== "object") raw.avatars = {};
+
+  raw.avatars[key] = record;
+
+  fileWriteRaw(raw);
+
+  return record;
 }
 
 // Joylashuvni yozadi. O'YINCHI YOZUVIGA UMUMAN TEGMAYDI —
@@ -1258,6 +1351,8 @@ module.exports = {
   readPlayers,
   writePlayers,
   writeLive,
+  readAvatar,
+  writeAvatar,
   withLock,
   getWorld,
 
