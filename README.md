@@ -2,6 +2,11 @@
 
 Geolokatsiya asosidagi hudud egallash o'yini.
 
+> **Ulanishlar (baza, Vercel, APK, admin) — [SETUP.md](SETUP.md).**
+> Baza ulanmasa o'yin ko'p kishilik bo'lmaydi: Vercel'da fayl
+> vaqtinchalik va hududlar yo'qoladi.
+
+
 ## Lokalda ishga tushirish
 
 ```powershell
