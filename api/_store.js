@@ -854,7 +854,33 @@ async function redisPipeline(commands) {
 
   const data = await response.json();
 
-  return (Array.isArray(data) ? data : [data]).map((row) => row.result);
+  const rows = Array.isArray(data) ? data : [data];
+
+  // ---------------------------------------------------------
+  // MUHIM: Upstash buyruq xatosini HTTP 200 ICHIDA qaytaradi:
+  //
+  //   [ { "error": "ERR max daily request limit exceeded" } ]
+  //
+  // Ilgari bu xato e'tiborsiz qolardi va `row.result` undefined
+  // bo'lib qaytardi. Ya'ni yozish amali muvaffaqiyatli
+  // ko'rinardi, aslida esa hech narsa saqlanmagan bo'lardi —
+  // ma'lumot jimgina yo'qolardi.
+  //
+  // Endi xato ochiq qaytadi: klient hududni saqlab turadi va
+  // o'zi qayta yuboradi.
+  // ---------------------------------------------------------
+
+  const failed = rows.find((row) => row && row.error);
+
+  if (failed) {
+    const error = new Error("Redis buyrug'i rad etildi: " + failed.error);
+
+    error.status = 503;
+
+    throw error;
+  }
+
+  return rows.map((row) => row.result);
 }
 
 function parseRow(raw) {
@@ -1200,9 +1226,27 @@ async function redisAcquire(key, token) {
   return result === "OK";
 }
 
+// Qulfni ochish EVAL orqali bo'lishi kerak — u atomik.
+//
+// Ammo EVAL biror sababdan ishlamasa (plan cheklovi, eski server),
+// qulf ochilmay qolar va HAR BIR da'vo qulf muddati tugashini
+// kutib o'tirardi — sekin, keyin esa 503. Shuning uchun zaxira
+// yo'l bor: kalit hali ham BIZNIKI bo'lsa, oddiy DEL bilan
+// ochamiz. Bu atomik emas, lekin qulfsiz qolishdan yaxshiroq.
 async function redisRelease(key, token) {
   try {
     await redisPipeline([["EVAL", UNLOCK_SCRIPT, "1", key, token]]);
+    return;
+  } catch {
+    /* pastdagi zaxira yo'l bilan urinamiz */
+  }
+
+  try {
+    const [current] = await redisPipeline([["GET", key]]);
+
+    if (current === token) {
+      await redisPipeline([["DEL", key]]);
+    }
   } catch {
     /* muddati o'zi tugaydi */
   }
