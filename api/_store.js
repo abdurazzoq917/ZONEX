@@ -1300,12 +1300,56 @@ async function withLock(name, fn) {
   throw busy;
 }
 
+// ============================================================
+// TASHXIS — KV nega ulanmadi?
+// ============================================================
+//
+// Vercel'da muhit o'zgaruvchilarini ko'rib bo'lmaydi, shuning
+// uchun /api/world javobida QAYSI NOMLAR topilgani aytiladi.
+//
+// Faqat NOMLAR — qiymatlar (token) hech qachon qaytmaydi.
+// Ro'yxat qat'iy: begona o'zgaruvchi nomi sizib chiqmaydi.
+// ============================================================
+
+const KV_ENV_NAMES = [
+  "KV_REST_API_URL",
+  "KV_REST_API_TOKEN",
+  "UPSTASH_REDIS_REST_URL",
+  "UPSTASH_REDIS_REST_TOKEN"
+];
+
+function storageReport() {
+  const found = KV_ENV_NAMES.filter((name) =>
+    String(process.env[name] || "").trim()
+  );
+
+  const report = {
+    mode: USE_REDIS ? "kv" : "file",
+    envFound: found
+  };
+
+  if (USE_REDIS) return report;
+
+  if (!found.length) {
+    report.reason =
+      "KV o'zgaruvchilari topilmadi. Vercel: Settings > Environment " +
+      "Variables > Production, keyin ALBATTA Redeploy qiling.";
+  } else {
+    report.reason =
+      "Juftlik to'liq emas — URL va TOKEN ikkalasi ham kerak. " +
+      "Topilgani: " + found.join(", ");
+  }
+
+  return report;
+}
+
 async function getWorld(viewerId) {
   const players = await readPlayers();
 
   return {
     players: publicList(players, viewerId),
     storage: USE_REDIS ? "kv" : "file",
+    storageInfo: storageReport(),
     time: Date.now()
   };
 }
@@ -1394,6 +1438,8 @@ module.exports = {
   // saqlash
   readPlayers,
   writePlayers,
+  storageReport,
+
   writeLive,
   readAvatar,
   writeAvatar,

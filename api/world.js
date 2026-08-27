@@ -26,6 +26,7 @@ module.exports = async function handler(req, res) {
       ok: true,
       players: world.players,
       storage: world.storage,
+      storageInfo: world.storageInfo,
       rules: RULES,
       time: world.time
     });
