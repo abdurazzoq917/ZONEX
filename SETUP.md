@@ -1,5 +1,9 @@
 # ZONEX — ulanishlar qo'llanmasi
 
+**Jonli sayt:** https://zonex-project.vercel.app
+**Baza:** Upstash Redis, ulangan (`/api/world` → `"storage": "kv"`)
+**Ilova:** 1.4 (versionCode 5) — Vercel serveriga ulanadi
+
 Bu yerda ZONEX'ni ishga tushirish uchun kerak bo'ladigan barcha
 ulanishlar bor: baza, Vercel, APK va admin.
 
@@ -208,7 +212,13 @@ Ulash uchun `DATABASE_URL` kerak bo'ladi.
 
 ## Qisqacha ro'yxat
 
-- [ ] Upstash Redis ulash va `/api/world` da `"storage": "kv"` ni ko'rish
-- [ ] `ADMIN_KEY` ni to'ldirish
-- [ ] `public/native-config.js` ga Vercel manzilini yozish
-- [ ] APK'ni qayta yig'ish va `version.json` ni yangilash
+- [x] Upstash Redis ulandi — `/api/world` da `"storage": "kv"`
+- [x] `ADMIN_KEY` qo'yildi
+- [x] `public/native-config.js` → `https://zonex-project.vercel.app`
+- [x] APK 1.4 yig'ildi, `version.json` va `releases/` yangilandi
+
+### Keyingi safar
+
+- Butun dunyoni emas, faqat xaritaning ko'rinib turgan qismini
+  yuborish (Upstash bepul tarifi cheklangan — 5-bo'limga qarang)
+- Postgres + PostGIS ga o'tish
