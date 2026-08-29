@@ -49,13 +49,26 @@ function badJson() {
 }
 
 async function readBody(req) {
-  if (req.body && typeof req.body === "object") {
-    return req.body;
+  // Vercel body'ni o'zi tahlil qiladi va buzuq JSON kelsa
+  // `req.body` GA MUROJAAT QILISHNING O'ZI xato tashlaydi.
+  // O'sha xatoda `status` bo'lmagani uchun u 500 bo'lib
+  // ko'rinardi — go'yo server yiqilgandek. Aslida bu klient
+  // xatosi, ya'ni 400.
+  let parsed;
+
+  try {
+    parsed = req.body;
+  } catch {
+    throw badJson();
   }
 
-  if (typeof req.body === "string") {
+  if (parsed && typeof parsed === "object") {
+    return parsed;
+  }
+
+  if (typeof parsed === "string") {
     try {
-      return JSON.parse(req.body || "{}");
+      return JSON.parse(parsed || "{}");
     } catch {
       throw badJson();
     }

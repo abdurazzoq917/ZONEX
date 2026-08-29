@@ -315,13 +315,17 @@ Ulash uchun `DATABASE_URL` kerak bo'ladi.
 ## Qisqacha ro'yxat
 
 - [x] Upstash Redis ulandi — `/api/world` da `"storage": "kv"`
-- [x] `ADMIN_KEY` qo'yildi
+- [x] `ADMIN_KEY` qo'yildi — Production'da `Secret` turida.
+      Qiymati lokal `.env` faylingizda. Admin funksiyasini
+      birinchi marta ishlatganda ilova uni bir marta so'raydi.
 - [x] `public/native-config.js` → `https://zonex-project.vercel.app`
 - [x] APK 1.4 yig'ildi, `version.json` va `releases/` yangilandi
-- [ ] `MAIL_USER` / `MAIL_PASS` qo'yildi — `/api/world` da
+- [x] `MAIL_USER` / `MAIL_PASS` qo'yildi — `/api/world` da
       `"mailInfo": { "mode": "gmail" }`
-- [ ] `node scripts/reset-db.js --yes` bilan eski akkauntlar
-      tozalandi
+- [x] Eski (parolsiz) akkauntlar o'chirildi — baza bo'sh,
+      `abdumalikov` nomi bo'sh turibdi
+- [ ] Emailga kod kelishi sinab ko'rilmadi — buni faqat haqiqiy
+      xat yuborib bilsa bo'ladi (saytdan «Parolni unutdingizmi?»)
 
 ### Keyingi safar
 
