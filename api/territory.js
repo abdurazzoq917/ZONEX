@@ -16,10 +16,7 @@ const { locked } = require("./_lock");
 const {
   readPlayers,
   writePlayers,
-  createPlayer,
-  normalizeName,
   normalizeTerritory,
-  isNameTaken,
   rebuildArea,
   cleanPoints,
   perimeterMeters,
@@ -31,6 +28,8 @@ const {
   geo,
   RULES
 } = require("./_store");
+
+const { guard } = require("./_auth");
 
 function makeTerritoryId() {
   return (
@@ -266,7 +265,6 @@ async function handler(req, res) {
     const body = await readBody(req);
 
     const id = String(body.id || "").trim();
-    const name = normalizeName(body.name);
 
     if (!id) {
       return json(res, 400, { error: "Qurilma ID kerak" });
@@ -357,23 +355,18 @@ async function handler(req, res) {
 
     const players = await readPlayers();
 
-    let player = players[id];
+    // Akkaunt bu yerda yaratilmaydi — /api/auth ning ishi.
+    // Token birovning nomidan hudud egallashga yo'l qo'ymaydi.
+    const check = guard(players, id, req, body);
 
-    if (!player) {
-      if (!name) {
-        return json(res, 400, { error: "Avval ro'yxatdan o'ting" });
-      }
-
-      if (isNameTaken(players, name, id)) {
-        return json(res, 409, {
-          error: "name_taken",
-          message: "Bu username band. Boshqasini tanlang."
-        });
-      }
-
-      player = createPlayer(id, name);
-      players[id] = player;
+    if (!check.ok) {
+      return json(res, check.status, {
+        error: check.error,
+        message: check.message
+      });
     }
+
+    const player = check.player;
 
     // ---------------------------------------------------------
     // BAN — banlangan odam hudud egallay olmaydi

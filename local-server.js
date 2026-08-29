@@ -15,7 +15,7 @@ const PORT = Number(process.env.PORT) || 4173;
 
 const routes = {
   "/api/world": require("./api/world"),
-  "/api/register": require("./api/register"),
+  "/api/auth": require("./api/auth"),
   "/api/location": require("./api/location"),
   "/api/territory": require("./api/territory"),
   "/api/avatar": require("./api/avatar"),

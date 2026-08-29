@@ -9,7 +9,12 @@
 function cors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  // x-zonex-token — sessiya kaliti. U URL'da emas, sarlavhada
+  // yuriladi: URL server jurnallariga yozilib qolishi mumkin.
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, x-zonex-token"
+  );
 }
 
 function json(res, status, data) {

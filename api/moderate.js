@@ -26,6 +26,8 @@ const {
   RULES
 } = require("./_store");
 
+const { guard } = require("./_auth");
+
 async function handler(req, res) {
   if (preflight(req, res)) return;
 
@@ -45,7 +47,16 @@ async function handler(req, res) {
 
     const players = await readPlayers();
 
-    const admin = players[id];
+    const check = guard(players, id, req, body);
+
+    if (!check.ok) {
+      return json(res, check.status, {
+        error: check.error,
+        message: check.message
+      });
+    }
+
+    const admin = check.player;
 
     if (!adminAllowed(admin, body.key)) {
       return json(res, 403, {

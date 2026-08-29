@@ -112,6 +112,9 @@ Yuklanmaydigan boshqa narsalar: `android/` (juda katta),
 | `KV_REST_API_TOKEN` | ha | Baza kaliti |
 | `ADMIN_USERNAME` | yo'q | Admin useri (standart: `abdumalikov`) |
 | `ADMIN_KEY` | **ochiq saytda — ha** | Ban berish uchun maxfiy so'z |
+| `MAIL_USER` | **ha** | Gmail manzili — parolni tiklash kodi shundan ketadi |
+| `MAIL_PASS` | **ha** | Google "App password" (Gmail paroli EMAS) |
+| `MAIL_FROM` | yo'q | Xat kimdan kelgani (standart: `ZONEX <MAIL_USER>`) |
 
 > `ADMIN_KEY` bo'sh qolsa, `ADMIN_USERNAME` dagi username'ni olgan
 > **har qanday odam admin bo'la oladi**. Sayt ochiq bo'lsa albatta
@@ -119,7 +122,106 @@ Yuklanmaydigan boshqa narsalar: `android/` (juda katta),
 
 ---
 
-## 3. Android ilova `[SIZ]`
+## 3. Email — parolni tiklash `[SIZ]`
+
+### Nega kerak
+
+Odam parolini unutsa, emailiga 6 xonali kod boradi. Kodsiz parolni
+tiklashning boshqa yo'li yo'q — shuning uchun bu **majburiy**.
+
+### Google "App password" olish
+
+Bu yerga Gmail parolingiz **yozilmaydi**. Google alohida, faqat shu
+ilova uchun ishlaydigan 16 belgili parol beradi. Uni istalgan payt
+bekor qilsangiz, Gmail hisobingizga hech qanday ta'sir qilmaydi.
+
+1. https://myaccount.google.com/security → **2-Step Verification**
+   ni yoqing. (Yoqilmagan bo'lsa, keyingi qadam ochilmaydi — bu
+   Google qoidasi.)
+2. https://myaccount.google.com/apppasswords → nom bering
+   (masalan `ZONEX`) → **Create**
+3. Chiqqan 16 belgili kodni ko'chiring — u faqat **bir marta**
+   ko'rsatiladi.
+
+### Vercel'ga qo'yish
+
+Settings → Environment Variables → **Production**:
+
+```
+MAIL_USER = sizning@gmail.com
+MAIL_PASS = abcd efgh ijkl mnop
+```
+
+Keyin **Deployments → oxirgisi → Redeploy**. (Redeploy qilmasangiz
+eski nusxa eski o'zgaruvchilar bilan ishlab turaveradi.)
+
+### Tekshirish
+
+Saytda `/api/world` ni oching:
+
+```json
+{ "mailInfo": { "mode": "gmail" } }     ← to'g'ri
+{ "mailInfo": { "mode": "off" } }       ← sozlanmagan
+```
+
+### Lokalda sinash
+
+`.env` da `MAIL_USER`/`MAIL_PASS` bo'sh qolsa, kod **email o'rniga
+terminalga** chiqadi:
+
+```
+[ZONEX] Email sozlanmagan — kod shu yerda:
+        jasur@gmail.com  ->  194057
+```
+
+Ya'ni email sozlamasdan turib ham butun oqimni sinab ko'rasiz.
+
+### Chegara
+
+Gmail SMTP kuniga ~500 xat yuboradi. Bu kichik ilova uchun yetarli.
+O'yinchilar ko'paysa — Resend yoki shunga o'xshash xizmatga o'tiladi
+(faqat `api/_mail.js` o'zgaradi, qolgan kodga tegilmaydi).
+
+---
+
+## 4. Akkauntlar va bazani tozalash
+
+### Nima o'zgardi
+
+Ilgari akkaunt **qurilma ID** bo'yicha ochilardi: telefon almashsa
+hamma narsa yo'qolardi va ID'ni bilgan odam boshqa birovning
+nomidan ish qila olardi.
+
+Endi:
+
+- kirish **username + parol** bilan;
+- har bir akkauntda **email** bor (parolni tiklash uchun);
+- bitta akkauntga **bir nechta telefondan** kirish mumkin;
+- har bir so'rovga **token** qo'shiladi (`x-zonex-token`
+  sarlavhasi) — tokensiz hech kim birovning nomidan hudud
+  egallay olmaydi, xabarlarini o'qiy olmaydi.
+
+### Eski akkauntlarni o'chirish `[SIZ]`
+
+Eski yozuvlarda parol ham, email ham yo'q — ular bilan hech kim
+kira olmaydi, faqat usernameni band qilib turadi. Shuning uchun
+baza bir marta tozalanadi:
+
+```bash
+node scripts/reset-db.js          # faqat KO'RSATADI, o'chirmaydi
+node scripts/reset-db.js --yes    # haqiqatan o'chiradi
+```
+
+Skript `.env` dagi KV ma'lumotlaridan foydalanadi. KV ulanmagan
+bo'lsa — lokal `world.json` ni tozalaydi va avval zaxira nusxa
+qoldiradi.
+
+> **Bu amalni orqaga qaytarib bo'lmaydi.** Avval `--yes` siz ishga
+> tushiring va nechta yozuv o'chishini ko'ring.
+
+---
+
+## 5. Android ilova `[SIZ]`
 
 APK qaysi serverga ulanishini bitta fayl belgilaydi:
 
@@ -161,7 +263,7 @@ ham** yangilash kerak:
 
 ---
 
-## 4. Play Market `[SIZ]`
+## 6. Play Market `[SIZ]`
 
 **Bepul emas.** Google Play Console dasturchi akkaunti bir martalik
 **$25** to'lovni talab qiladi. Ustiga yangi shaxsiy akkauntlar uchun
@@ -180,7 +282,7 @@ avto-yangilanish allaqachon bor.
 
 ---
 
-## 5. Keyingi bosqich: Postgres + PostGIS
+## 7. Keyingi bosqich: Postgres + PostGIS
 
 Bu hali **qilinmagan**, lekin o'ylab qo'yilgan yo'l.
 
@@ -216,9 +318,13 @@ Ulash uchun `DATABASE_URL` kerak bo'ladi.
 - [x] `ADMIN_KEY` qo'yildi
 - [x] `public/native-config.js` → `https://zonex-project.vercel.app`
 - [x] APK 1.4 yig'ildi, `version.json` va `releases/` yangilandi
+- [ ] `MAIL_USER` / `MAIL_PASS` qo'yildi — `/api/world` da
+      `"mailInfo": { "mode": "gmail" }`
+- [ ] `node scripts/reset-db.js --yes` bilan eski akkauntlar
+      tozalandi
 
 ### Keyingi safar
 
 - Butun dunyoni emas, faqat xaritaning ko'rinib turgan qismini
-  yuborish (Upstash bepul tarifi cheklangan — 5-bo'limga qarang)
+  yuborish (Upstash bepul tarifi cheklangan — 7-bo'limga qarang)
 - Postgres + PostGIS ga o'tish

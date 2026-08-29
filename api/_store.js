@@ -23,8 +23,10 @@ require("./_env");
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const geo = require("./_geo");
+const auth = require("./_auth");
 
 const REDIS_URL =
   process.env.KV_REST_API_URL ||
@@ -546,6 +548,13 @@ function idList(value) {
   return Array.from(seen).slice(0, 500);
 }
 
+// Akkaunt raqami. Ilgari bu QURILMA ID edi — endi u serverda
+// yaratiladi, chunki bitta akkauntga bir nechta telefondan
+// kirish mumkin va akkaunt qurilmaga bog'lanmagan.
+function newPlayerId() {
+  return "p-" + crypto.randomUUID();
+}
+
 function createPlayer(id, name) {
   const now = Date.now();
 
@@ -560,6 +569,18 @@ function createPlayer(id, name) {
     area: 0,
     territories: [],
     totalDistance: 0,
+
+    // ---- akkaunt (maxfiy — publicPlayer bularni bermaydi) ----
+    //
+    // pass     — { salt, hash }: parolning o'zi saqlanmaydi
+    // email    — parolni tiklash uchun
+    // sessions — kirgan qurilmalar tokenlarining izlari
+    email: "",
+    emailAt: 0,
+    pass: null,
+    sessions: [],
+    reset: null,
+    loginGate: null,
 
     // profil (rasmning o'zi alohida kalitda — bu yerda versiya)
     avatarAt: 0,
@@ -738,6 +759,9 @@ function normalizePlayer(player, id) {
   player.banAt = Number(player.banAt) || 0;
   player.nsfwHits = Number(player.nsfwHits) || 0;
 
+  // ---- akkaunt (parol, email, sessiyalar) ----
+  auth.normalizeAuth(player);
+
   // ---- do'stlik ----
   player.friends = idList(player.friends);
   player.incoming = idList(player.incoming);
@@ -763,6 +787,13 @@ function normalizePlayer(player, id) {
 // beriladi, rasmni klient /api/avatar dan bir marta oladi.
 //
 // So'rovlar ro'yxati faqat o'ziga ko'rinadi.
+//
+// MUHIM: bu yer OQ RO'YXAT — pastda sanalgan maydonlargina
+// tashqariga chiqadi. Parol (`pass`), sessiya tokenlari
+// (`sessions`), tiklash kodi (`reset`) va email manzilining
+// o'zi bu ro'yxatda YO'Q, shuning uchun ular hech qachon
+// javobga tushmaydi. Yangi maxfiy maydon qo'shsangiz —
+// bu ro'yxatga QO'SHMANG.
 // ============================================================
 
 function publicPlayer(player, viewerId) {
@@ -794,6 +825,12 @@ function publicPlayer(player, viewerId) {
     out.incoming = player.incoming;
     out.outgoing = player.outgoing;
     out.nsfwHits = player.nsfwHits;
+
+    // O'ziga: email BOR-yo'qligi va yashirilgan ko'rinishi.
+    // To'liq manzil qaytmaydi — u faqat bazada qoladi.
+    out.hasEmail = Boolean(player.email);
+    out.emailMasked = auth.maskEmail(player.email);
+    out.devices = Array.isArray(player.sessions) ? player.sessions.length : 0;
   } else {
     // Boshqalar uchun: menga so'rov yuborganmi / yubordimmi —
     // buni klient o'z yozuvidan biladi
@@ -1431,6 +1468,46 @@ function isNameTaken(players, name, ownId) {
   );
 }
 
+// Username bo'yicha topish (kirish uchun)
+function findByName(players, name) {
+  const key = nameKey(name);
+
+  if (!key) return null;
+
+  return (
+    Object.values(players).find((player) => nameKey(player.name) === key) ||
+    null
+  );
+}
+
+// Email bo'yicha topish (parolni tiklashda username ham,
+// email ham qabul qilinadi)
+function findByEmail(players, email) {
+  const key = auth.normalizeEmail(email);
+
+  if (!key) return null;
+
+  return (
+    Object.values(players).find(
+      (player) => auth.normalizeEmail(player.email) === key
+    ) || null
+  );
+}
+
+// Bitta emailga bitta akkaunt — aks holda parolni tiklash
+// oynasida qaysi akkaunt ekani chalkashib ketadi.
+function isEmailTaken(players, email, ownId) {
+  const key = auth.normalizeEmail(email);
+
+  if (!key) return false;
+
+  return Object.values(players).some(
+    (player) =>
+      String(player.id) !== String(ownId) &&
+      auth.normalizeEmail(player.email) === key
+  );
+}
+
 module.exports = {
   RULES,
   ADMIN_USERNAME,
@@ -1464,6 +1541,12 @@ module.exports = {
   nameKey,
   isNameTaken,
   playerColor,
+  newPlayerId,
+
+  // akkaunt qidirish
+  findByName,
+  findByEmail,
+  isEmailTaken,
 
   // moderatsiya / do'stlik
   isAdminName,

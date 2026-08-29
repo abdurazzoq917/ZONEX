@@ -94,19 +94,133 @@
     <p class="hint" id="hint">Yo‘lingizni kesib o‘ting — o‘sha joy sizniki bo‘ladi</p>
   </main>
 
-  <div class="modal" id="welcomeModal">
-    <div class="modal-card">
+  <!-- ============================================================
+       AKKAUNT: KIRISH / RO'YXAT / PAROLNI TIKLASH
+
+       Bitta oyna, beshta ekran. Qaysi biri ko'rinishi
+       data-screen atributiga bog'liq (client.js: showAuth).
+       ============================================================ -->
+  <div class="modal" id="authModal">
+    <div class="modal-card auth" id="authCard" data-screen="login">
+
       <div class="logo-mark"><span>ZONE</span><i>X</i></div>
-      <div class="mini-map"><div class="route-shape"></div><b class="pin p1"></b><b class="pin p2"></b></div>
-      <p class="eyebrow">SHAHAR SENIKI</p>
-      <h1>Yur. Egalla.<br><em>Himoya qil.</em></h1>
-      <p class="intro">Yurgan yo‘lingiz bilan hudud yarating. Kattaroq maydonni aylanib, raqiblaringiz yerini egallang.</p>
-      <label for="nameInput">USERNAME</label>
-      <input id="nameInput" maxlength="16" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" placeholder="masalan, jasur_07" />
-      <p class="hint-small">Faqat harf, raqam, «_» va «.» — bitta usernameni ikki kishi ola olmaydi</p>
-      <p class="error" id="nameError">Davom etish uchun username yozing</p>
-      <button class="primary" id="continueBtn">DAVOM ETISH <span>→</span></button>
-      <small class="terms">Davom etib, xavfsizlik qoidalariga rozilik bildirasiz</small>
+
+      <!-- ---------- KIRISH ---------- -->
+      <section class="auth-screen" data-pane="login">
+        <div class="mini-map"><div class="route-shape"></div><b class="pin p1"></b><b class="pin p2"></b></div>
+        <p class="eyebrow">SHAHAR SENIKI</p>
+        <h1>Yur. Egalla.<br><em>Himoya qil.</em></h1>
+        <p class="intro">Akkauntingizga kiring — hududlaringiz va do‘stlaringiz istalgan telefonda o‘zingiz bilan.</p>
+
+        <label for="loginName">USERNAME YOKI EMAIL</label>
+        <input id="loginName" autocapitalize="off" autocorrect="off" spellcheck="false"
+               autocomplete="username" placeholder="jasur_07" />
+
+        <label for="loginPass" class="mt">PAROL</label>
+        <div class="pass-wrap">
+          <input id="loginPass" type="password" autocomplete="current-password" placeholder="••••••••" />
+          <button class="eye" type="button" data-eye="loginPass" aria-label="Parolni ko‘rsatish">👁</button>
+        </div>
+
+        <p class="error" id="loginError"></p>
+
+        <button class="primary" id="loginBtn">KIRISH <span>→</span></button>
+        <button class="text-btn" type="button" id="toForgot">Parolni unutdingizmi?</button>
+
+        <p class="auth-swap">Akkauntingiz yo‘qmi?
+          <button type="button" id="toRegister">Ro‘yxatdan o‘ting</button>
+        </p>
+      </section>
+
+      <!-- ---------- RO'YXATDAN O'TISH ---------- -->
+      <section class="auth-screen" data-pane="register">
+        <p class="eyebrow">YANGI AKKAUNT</p>
+        <h1>Bir daqiqada<br><em>boshlaymiz</em></h1>
+
+        <label for="regName">USERNAME</label>
+        <input id="regName" maxlength="16" autocapitalize="off" autocorrect="off" spellcheck="false"
+               autocomplete="username" placeholder="jasur_07" />
+        <p class="hint-small">Faqat harf, raqam, «_» va «.» — bitta usernameni ikki kishi ola olmaydi</p>
+
+        <label for="regEmail" class="mt">EMAIL</label>
+        <input id="regEmail" type="email" inputmode="email" autocapitalize="off" autocorrect="off"
+               spellcheck="false" autocomplete="email" placeholder="ism@gmail.com" />
+        <p class="hint-small">Parolni unutsangiz, tiklash kodi shu manzilga keladi</p>
+
+        <label for="regPass" class="mt">PAROL</label>
+        <div class="pass-wrap">
+          <input id="regPass" type="password" autocomplete="new-password" placeholder="kamida 6 ta belgi" />
+          <button class="eye" type="button" data-eye="regPass" aria-label="Parolni ko‘rsatish">👁</button>
+        </div>
+
+        <!-- Parol kuchi: uchta bo'lak to'ladi -->
+        <div class="pass-meter" id="regMeter" data-level=""><i></i><i></i><i></i></div>
+        <p class="pass-msg" id="regPassMsg"></p>
+
+        <p class="error" id="regError"></p>
+
+        <button class="primary" id="registerBtn">RO‘YXATDAN O‘TISH <span>→</span></button>
+
+        <p class="auth-swap">Akkauntingiz bormi?
+          <button type="button" id="toLogin">Kiring</button>
+        </p>
+        <small class="terms">Davom etib, xavfsizlik qoidalariga rozilik bildirasiz</small>
+      </section>
+
+      <!-- ---------- PAROLNI TIKLASH: 1 — kod so'rash ---------- -->
+      <section class="auth-screen" data-pane="forgot">
+        <p class="eyebrow">1-QADAM</p>
+        <h1>Parolni<br><em>tiklaymiz</em></h1>
+        <p class="intro">Akkauntingizni ayting — emailingizga 6 xonali kod yuboramiz.</p>
+
+        <label for="forgotName">USERNAME YOKI EMAIL</label>
+        <input id="forgotName" autocapitalize="off" autocorrect="off" spellcheck="false"
+               autocomplete="username" placeholder="jasur_07" />
+
+        <p class="error" id="forgotError"></p>
+
+        <button class="primary" id="forgotBtn">KOD YUBORISH <span>→</span></button>
+        <button class="text-btn" type="button" data-back="login">← Kirish oynasiga qaytish</button>
+      </section>
+
+      <!-- ---------- PAROLNI TIKLASH: 2 — kodni kiritish ---------- -->
+      <section class="auth-screen" data-pane="code">
+        <p class="eyebrow">2-QADAM</p>
+        <h1>Kodni<br><em>kiriting</em></h1>
+        <p class="intro">Kod <b id="codeEmail">emailingizga</b> yuborildi. Xat 1–2 daqiqada keladi — «Spam» papkasini ham tekshiring.</p>
+
+        <label for="codeInput">6 XONALI KOD</label>
+        <input id="codeInput" class="code-input" inputmode="numeric" maxlength="6"
+               autocomplete="one-time-code" placeholder="000000" />
+
+        <p class="error" id="codeError"></p>
+
+        <button class="primary" id="codeBtn">TASDIQLASH <span>→</span></button>
+        <button class="text-btn" type="button" id="resendBtn">Kod kelmadimi? Qayta yuborish</button>
+        <button class="text-btn" type="button" data-back="login">← Kirish oynasiga qaytish</button>
+      </section>
+
+      <!-- ---------- PAROLNI TIKLASH: 3 — yangi parol ---------- -->
+      <section class="auth-screen" data-pane="newpass">
+        <p class="eyebrow">3-QADAM</p>
+        <h1>Yangi<br><em>parol</em></h1>
+        <p class="intro">Yangi parol qo‘yilgach, barcha qurilmalardan chiqib ketasiz — bu akkauntingizni himoya qiladi.</p>
+
+        <label for="newPass">YANGI PAROL</label>
+        <div class="pass-wrap">
+          <input id="newPass" type="password" autocomplete="new-password" placeholder="kamida 6 ta belgi" />
+          <button class="eye" type="button" data-eye="newPass" aria-label="Parolni ko‘rsatish">👁</button>
+        </div>
+
+        <div class="pass-meter" id="newMeter" data-level=""><i></i><i></i><i></i></div>
+        <p class="pass-msg" id="newPassMsg"></p>
+
+        <p class="error" id="newError"></p>
+
+        <button class="primary" id="newPassBtn">SAQLASH VA KIRISH <span>→</span></button>
+        <button class="text-btn" type="button" data-back="login">← Kirish oynasiga qaytish</button>
+      </section>
+
     </div>
   </div>
 
@@ -125,6 +239,36 @@
     <div class="modal-card profile">
       <button class="close-x" id="closeProfile" type="button" aria-label="Yopish">×</button>
       <div id="profileBody"></div>
+    </div>
+  </div>
+
+  <!-- Parolni almashtirish — profil ichidan ochiladi -->
+  <div class="modal" id="passModal">
+    <div class="modal-card">
+      <button class="close-x" id="closePass" type="button" aria-label="Yopish">×</button>
+
+      <p class="eyebrow">XAVFSIZLIK</p>
+      <h2>Parolni<br><em>almashtirish</em></h2>
+
+      <label for="oldPass" class="mt">HOZIRGI PAROL</label>
+      <div class="pass-wrap">
+        <input id="oldPass" type="password" autocomplete="current-password" placeholder="••••••••" />
+        <button class="eye" type="button" data-eye="oldPass" aria-label="Parolni ko‘rsatish">👁</button>
+      </div>
+
+      <label for="changePass" class="mt">YANGI PAROL</label>
+      <div class="pass-wrap">
+        <input id="changePass" type="password" autocomplete="new-password" placeholder="kamida 6 ta belgi" />
+        <button class="eye" type="button" data-eye="changePass" aria-label="Parolni ko‘rsatish">👁</button>
+      </div>
+
+      <div class="pass-meter" id="changeMeter" data-level=""><i></i><i></i><i></i></div>
+      <p class="pass-msg" id="changePassMsg"></p>
+
+      <p class="error" id="changeError"></p>
+
+      <button class="primary" id="changeBtn">SAQLASH <span>→</span></button>
+      <small class="terms">Parol o‘zgargach, barcha qurilmalardan chiqib ketasiz</small>
     </div>
   </div>
 

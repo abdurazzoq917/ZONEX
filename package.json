@@ -8,7 +8,8 @@
     "kv": "node scripts/kv-check.js",
     "build:native": "node scripts/build-native-www.js",
     "cap:sync": "npm run build:native && npx cap sync android",
-    "android:debug": "npm run cap:sync && cd android && gradlew.bat assembleDebug"
+    "android:debug": "npm run cap:sync && cd android && gradlew.bat assembleDebug",
+    "reset-db": "node scripts/reset-db.js"
   },
   "engines": {
     "node": ">=18"
@@ -20,6 +21,7 @@
     "@capacitor/core": "^8.5.0",
     "@capacitor/filesystem": "^8.1.3",
     "@capacitor/network": "^8.0.1",
+    "nodemailer": "^9.0.6",
     "polygon-clipping": "^0.15.7"
   },
   "devDependencies": {

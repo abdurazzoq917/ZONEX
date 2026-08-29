@@ -21,6 +21,8 @@ const {
   banInfo
 } = require("./_store");
 
+const { guard } = require("./_auth");
+
 function makeMessageId() {
   return (
     "m-" +
@@ -59,11 +61,18 @@ module.exports = async function handler(req, res) {
 
         const all = await readPlayers();
 
-        const self = all[id];
+        // Suhbatlar — shaxsiy. Faqat ID bilan (tokensiz) birov
+        // boshqa odamning yozishmalarini o'qiy olmasin.
+        const listCheck = guard(all, id, req, null);
 
-        if (!self) {
-          return json(res, 400, { error: "Avval ro'yxatdan o'ting" });
+        if (!listCheck.ok) {
+          return json(res, listCheck.status, {
+            error: listCheck.error,
+            message: listCheck.message
+          });
         }
+
+        const self = listCheck.player;
 
         const ids = Array.isArray(self.friends) ? self.friends : [];
 
@@ -115,11 +124,16 @@ module.exports = async function handler(req, res) {
 
       const players = await readPlayers();
 
-      const me = players[id];
+      const readCheck = guard(players, id, req, null);
 
-      if (!me) {
-        return json(res, 400, { error: "Avval ro'yxatdan o'ting" });
+      if (!readCheck.ok) {
+        return json(res, readCheck.status, {
+          error: readCheck.error,
+          message: readCheck.message
+        });
       }
+
+      const me = readCheck.player;
 
       if (!me.friends.includes(other)) {
         return json(res, 403, {
@@ -163,12 +177,17 @@ module.exports = async function handler(req, res) {
 
     const players = await readPlayers();
 
-    const me = players[id];
-    const other = players[to];
+    const check = guard(players, id, req, body);
 
-    if (!me) {
-      return json(res, 400, { error: "Avval ro'yxatdan o'ting" });
+    if (!check.ok) {
+      return json(res, check.status, {
+        error: check.error,
+        message: check.message
+      });
     }
+
+    const me = check.player;
+    const other = players[to];
 
     if (!other) {
       return json(res, 404, { error: "Bunday odam topilmadi" });

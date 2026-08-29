@@ -22,6 +22,8 @@ const {
   publicList
 } = require("./_store");
 
+const { guard } = require("./_auth");
+
 function drop(list, value) {
   return (Array.isArray(list) ? list : []).filter(
     (item) => String(item) !== String(value)
@@ -64,12 +66,17 @@ async function handler(req, res) {
 
     const players = await readPlayers();
 
-    const me = players[id];
-    const other = players[target];
+    const check = guard(players, id, req, body);
 
-    if (!me) {
-      return json(res, 400, { error: "Avval ro'yxatdan o'ting" });
+    if (!check.ok) {
+      return json(res, check.status, {
+        error: check.error,
+        message: check.message
+      });
     }
+
+    const me = check.player;
+    const other = players[target];
 
     if (!other) {
       return json(res, 404, { error: "Bunday odam topilmadi" });

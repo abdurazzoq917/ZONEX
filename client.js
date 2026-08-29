@@ -149,19 +149,55 @@ function saveBig(key, value) {
   }
 }
 
-function deviceId() {
-  let id = loadStored("zonexId");
+// ============================================================
+// AKKAUNT — endi qurilma emas, PAROL bilan aniqlanadi
+// ============================================================
+//
+// Ilgari bu yerda qurilma ID yaratilardi va o'sha "akkaunt"
+// hisoblanardi: telefon almashsa hamma narsa yo'qolardi, ID'ni
+// bilgan odam esa boshqa birovning nomidan ish qila olardi.
+//
+// Endi akkaunt raqamini SERVER beradi (ro'yxatdan o'tishda) va
+// har bir so'rovga TOKEN qo'shiladi. Shu tufayli bitta
+// akkauntga bir nechta telefondan kirish mumkin.
+//
+// Saqlanadigan qiymatlar:
+//
+//   zonexAccount — akkaunt raqami (server bergan)
+//   zonexToken   — shu qurilmaning kaliti
+// ============================================================
 
-  if (!id) {
-    id =
-      crypto && crypto.randomUUID
-        ? crypto.randomUUID()
-        : Date.now().toString(36) + Math.random().toString(36).slice(2);
+function loadAccountId() {
+  return loadStored("zonexAccount");
+}
 
-    saveStored("zonexId", id);
+function loadToken() {
+  return loadStored("zonexToken");
+}
+
+// Kirgandan keyin chaqiriladi
+function saveAccount(id, token, name) {
+  state.id = String(id || "");
+  state.token = String(token || "");
+
+  saveStored("zonexAccount", state.id);
+  saveStored("zonexToken", state.token);
+
+  if (name) {
+    state.name = name;
+    saveStored("zonexName", name);
   }
+}
 
-  return id;
+// Chiqishda — kalitlar o'chadi, xarita ma'lumoti qoladi
+function clearAccount() {
+  state.id = "";
+  state.token = "";
+  state.name = "";
+
+  saveStored("zonexAccount", "");
+  saveStored("zonexToken", "");
+  saveStored("zonexName", "");
 }
 
 // ============================================================
@@ -169,9 +205,17 @@ function deviceId() {
 // ============================================================
 
 const state = {
-  id: deviceId(),
+  id: loadAccountId(),
+  token: loadToken(),
   name: loadStored("zonexName"),
   color: loadStored("zonexColor") || "",
+
+  // Qaysi akkaunt ekranida turibmiz (client.js: showAuth)
+  authScreen: "login",
+
+  // Parolni tiklash oqimida ishlatiladi
+  resetLogin: "",
+  resetTicket: "",
 
   map: null,
   marker: null,
@@ -1100,10 +1144,18 @@ function updateMyCard(me, mine) {
 // ============================================================
 
 async function api(url, body) {
+  const headers = {};
+
+  if (body) headers["Content-Type"] = "application/json";
+
+  // Sessiya kaliti. URL'da emas, sarlavhada — URL server
+  // jurnallariga yozilib qolishi mumkin.
+  if (state.token) headers["x-zonex-token"] = state.token;
+
   const response = await fetch(API_BASE + url, {
     method: body ? "POST" : "GET",
     cache: "no-store",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers: Object.keys(headers).length ? headers : undefined,
     body: body ? JSON.stringify(body) : undefined
   });
 
@@ -1115,7 +1167,42 @@ async function api(url, body) {
     /* javob JSON emas */
   }
 
+  // Sessiya tugagan yoki akkaunt o'chirilgan — bir joyda
+  // ushlaymiz, shunda har bir chaqiruvda takrorlash shart emas.
+  //
+  // /api/auth bundan MUSTASNO: u yerda 401 "parol noto'g'ri"
+  // degani, ya'ni odam hali kirmagan — uni "sessiya tugadi"
+  // deb chiqarib yuborish xato bo'lardi.
+  const isAuthCall = url.indexOf("/api/auth") === 0;
+
+  if (
+    !isAuthCall &&
+    (response.status === 401 ||
+      (response.status === 404 && data && data.error === "no_account"))
+  ) {
+    sessionLost(data && data.message);
+  }
+
   return { ok: response.ok, status: response.status, data };
+}
+
+// Sessiya yo'qoldi — o'yinni to'xtatib, kirish oynasini ochamiz
+function sessionLost(message) {
+  if (!state.id && !state.token) return; // allaqachon chiqarilgan
+
+  clearAccount();
+
+  clearInterval(state.worldTimer);
+  clearInterval(state.chatListTimer);
+
+  closeProfile();
+
+  showAuth("login");
+
+  showAuthError(
+    "#loginError",
+    message || "Sessiya muddati tugadi — qaytadan kiring"
+  );
 }
 
 async function fetchWorld() {
@@ -1149,7 +1236,7 @@ function startPolling() {
 }
 
 async function sendLocation(point, accuracy) {
-  if (!state.name) return;
+  if (!state.id || !state.token) return;
 
   if (Date.now() - state.lastSent < CONFIG.SEND_MS) return;
 
@@ -1158,7 +1245,6 @@ async function sendLocation(point, accuracy) {
   try {
     const { ok, data } = await api("/api/location", {
       id: state.id,
-      name: state.name,
       lat: point[0],
       lng: point[1],
       accuracy
@@ -1826,8 +1912,8 @@ document.addEventListener("visibilitychange", () => {
 });
 
 function startWalk() {
-  if (!state.name) {
-    $("#welcomeModal")?.classList.add("active");
+  if (!state.id || !state.token) {
+    showAuth("login");
     return;
   }
 
@@ -1878,7 +1964,6 @@ function addPending(entry) {
 async function pushTerritory(entry) {
   const { ok, status, data } = await api("/api/territory", {
     id: state.id,
-    name: state.name,
     points: entry.points,
     duration: entry.duration,
     distance: entry.distance,
@@ -2491,8 +2576,8 @@ function squareCanvas(image, size) {
 async function uploadAvatar(file) {
   if (!file || state.avatarBusy) return;
 
-  if (!state.name) {
-    toast("Avval username tanlang");
+  if (!state.id || !state.token) {
+    toast("Avval akkauntingizga kiring");
     return;
   }
 
@@ -2529,7 +2614,6 @@ async function uploadAvatar(file) {
 
     const { ok, status, data } = await api("/api/avatar", {
       id: state.id,
-      name: state.name,
       avatar: dataUrl,
       nsfw: verdict.nsfw,
       score: verdict.score
@@ -2649,6 +2733,38 @@ function loopRow(territory) {
   );
 }
 
+// ============================================================
+// PROFILDAGI XAVFSIZLIK BO'LIMI (faqat o'ziga ko'rinadi)
+// ============================================================
+//
+// Emailning to'liq ko'rinishi serverdan KELMAYDI — u yerda
+// yashirilgan holda (z*****v@gmail.com) tayyorlanadi.
+// ============================================================
+
+function accountHtml(player, isMe) {
+  if (!isMe) return "";
+
+  const email = player.emailMasked || "";
+
+  const devices = Number(player.devices || 0);
+
+  return (
+    '<div class="account-box">' +
+    '<div class="row"><span>Email</span><b>' +
+    (email ? esc(email) : "biriktirilmagan") +
+    "</b></div>" +
+    '<div class="row"><span>Parol</span>' +
+    '<button type="button" id="profilePass">Almashtirish</button></div>' +
+    '<div class="row"><span>Kirgan qurilmalar</span><b>' +
+    devices +
+    " ta</b></div>" +
+    '<div class="row"><span>Akkauntdan chiqish</span>' +
+    '<button type="button" class="danger" id="profileLogout">Chiqish</button>' +
+    "</div>" +
+    "</div>"
+  );
+}
+
 function openProfile(id) {
   const player = playerById(id);
 
@@ -2747,7 +2863,8 @@ function openProfile(id) {
       : "") +
     (player.location
       ? '<button class="ghost-btn" id="profileLocate">XARITADA KO\'RSATISH</button>'
-      : "");
+      : "") +
+    accountHtml(player, isMe);
 
   if (scroll) $("#profileBody").scrollTop = scroll;
 
@@ -2889,6 +3006,14 @@ function adminHtml(player) {
 // ------------------------------------------------------------
 
 function bindProfileButtons(player, zones) {
+  // ---- xavfsizlik bo'limi (faqat o'z profilida bor) ----
+  $("#profilePass")?.addEventListener("click", () => {
+    closeProfile();
+    openPassModal();
+  });
+
+  $("#profileLogout")?.addEventListener("click", logout);
+
   const modal = $("#profileModal");
 
   $("#avatarBtn")?.addEventListener("click", () => $("#avatarInput")?.click());
@@ -2967,8 +3092,8 @@ function showTerritory(territory) {
 // ============================================================
 
 async function friendAction(action, target) {
-  if (!state.name) {
-    toast("Avval username tanlang");
+  if (!state.id || !state.token) {
+    toast("Avval akkauntingizga kiring");
     return;
   }
 
@@ -3596,8 +3721,9 @@ function renderFriends() {
 
   if (!box || !state.friendsOpen) return;
 
-  if (!state.name) {
-    box.innerHTML = '<div class="live-empty">Avval username tanlang</div>';
+  if (!state.id || !state.token) {
+    box.innerHTML =
+      '<div class="live-empty">Avval akkauntingizga kiring</div>';
 
     return;
   }
@@ -3721,11 +3847,192 @@ function bindFriends() {
 }
 
 // ============================================================
-// USERNAME — FAQAT BIR MARTA
+// AKKAUNT: KIRISH / RO'YXAT / PAROLNI TIKLASH
+// ============================================================
+//
+// Barcha so'rovlar POST /api/auth ga ketadi (api/auth.js).
+// Muvaffaqiyatli javob: { id, token, player } — shundan keyin
+// `enterGame` o'yinni ishga tushiradi.
 // ============================================================
 
-function showNameError(message) {
-  const box = $("#nameError");
+// ------------------------------------------------------------
+// PAROL KUCHI
+// ------------------------------------------------------------
+//
+// Bu — server tomonidagi `passwordCheck` (api/_auth.js) ning
+// aynan nusxasi. Ikkalasi ham kerak:
+//
+//   bu yerdagisi — odam yozayotganda darhol qizil yozuv
+//                  chiqarish uchun;
+//   serverdagisi — brauzerni chetlab o'tib yuborilgan
+//                  so'rovni ham to'xtatish uchun.
+//
+// Biri o'zgarsa — ikkinchisini ham o'zgartiring.
+// ------------------------------------------------------------
+
+const PASS_MIN = 6;
+const PASS_MAX = 72;
+
+const COMMON_PASSWORDS = [
+  "123456", "1234567", "12345678", "123456789", "1234567890",
+  "password", "parol", "qwerty", "qwertyui", "asdfgh", "zxcvbn",
+  "111111", "000000", "121212", "abc123", "iloveyou", "admin",
+  "welcome", "letmein", "monkey", "dragon", "sunshine", "princess",
+  "zonex", "zonex123", "salom", "salom123", "parol123", "qwerty123"
+];
+
+function passwordCheck(raw, name) {
+  const password = String(raw == null ? "" : raw);
+
+  const out = { error: "", level: "weak", hint: "" };
+
+  if (!password) {
+    out.error = "Parol yozing";
+    return out;
+  }
+
+  if (password.length < PASS_MIN) {
+    out.error = "Parol kamida " + PASS_MIN + " ta belgidan iborat bo'lsin";
+    return out;
+  }
+
+  if (password.length > PASS_MAX) {
+    out.error = "Parol juda uzun";
+    return out;
+  }
+
+  if (/\s/.test(password)) {
+    out.error = "Parolda bo'sh joy bo'lmasin";
+    return out;
+  }
+
+  // ---- ASOSIY QOIDA: parol faqat raqamdan iborat bo'lmasin ----
+  //
+  // "1234", "2005", "998901234567" kabi parollar bir necha
+  // soniyada topiladi: ular odatda tug'ilgan yil yoki telefon
+  // raqami bo'ladi va sizni tanigan har kim taxmin qila oladi.
+  if (/^[0-9]+$/.test(password)) {
+    out.error =
+      "Parol faqat raqamlardan iborat bo'lmasin — kamida bitta harf qo'shing";
+    return out;
+  }
+
+  if (COMMON_PASSWORDS.indexOf(password.toLowerCase()) !== -1) {
+    out.error = "Bu parol juda mashhur — boshqasini o'ylab toping";
+    return out;
+  }
+
+  if (/^(.)\1+$/.test(password)) {
+    out.error = "Parol bitta belgining takroridan iborat bo'lmasin";
+    return out;
+  }
+
+  const clean = String(name || "").trim().toLowerCase();
+
+  if (clean && password.toLowerCase() === clean) {
+    out.error = "Parol username bilan bir xil bo'lmasin";
+    return out;
+  }
+
+  // ---- Kuch darajasi (bloklamaydi, faqat ko'rsatadi) ----
+
+  let score = 0;
+
+  if (password.length >= 8) score += 1;
+  if (password.length >= 12) score += 1;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
+  if (/[0-9]/.test(password)) score += 1;
+  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+
+  if (score >= 4) {
+    out.level = "strong";
+    out.hint = "Kuchli parol";
+  } else if (score >= 2) {
+    out.level = "medium";
+    out.hint = "O'rtacha — katta harf yoki belgi qo'shsangiz kuchliroq bo'ladi";
+  } else {
+    out.level = "weak";
+    out.hint = "Zaif — uzunroq qiling va raqam qo'shing";
+  }
+
+  return out;
+}
+
+// Parol maydoni ostidagi chiziqcha va yozuvni yangilaydi.
+//
+// Qoida buzilgan bo'lsa — yozuv QIZIL bo'ladi (aynan shu
+// "faqat raqam" holatida ham).
+function renderPassMeter(passSel, meterSel, msgSel, nameSel) {
+  const input = $(passSel);
+  const meter = $(meterSel);
+  const msg = $(msgSel);
+
+  if (!input || !meter || !msg) return;
+
+  const value = input.value;
+
+  if (!value) {
+    meter.dataset.level = "";
+    msg.className = "pass-msg";
+    msg.textContent = "";
+    return;
+  }
+
+  const name = nameSel && $(nameSel) ? $(nameSel).value : "";
+
+  const result = passwordCheck(value, name);
+
+  if (result.error) {
+    meter.dataset.level = "weak";
+    msg.className = "pass-msg show bad";
+    msg.textContent = result.error;
+    return;
+  }
+
+  meter.dataset.level = result.level;
+  msg.className = "pass-msg show " + result.level;
+  msg.textContent = result.hint;
+}
+
+// ------------------------------------------------------------
+// OYNA BOSHQARUVI
+// ------------------------------------------------------------
+
+function showAuth(screen) {
+  const card = $("#authCard");
+
+  if (card) card.dataset.screen = screen;
+
+  state.authScreen = screen;
+
+  // Kirish oynasi eng ustida turishi kerak. Chiqishdan oldin
+  // ochilib qolgan boshqa oynalar (masalan joylashuv so'rovi)
+  // uni to'sib qo'ymasin.
+  ["#locationModal", "#profileModal", "#chatModal", "#passModal"].forEach(
+    (selector) => $(selector)?.classList.remove("active")
+  );
+
+  $("#authModal")?.classList.add("active");
+
+  // Har bir ekranda birinchi maydonga fokus
+  const first = {
+    login: "#loginName",
+    register: "#regName",
+    forgot: "#forgotName",
+    code: "#codeInput",
+    newpass: "#newPass"
+  }[screen];
+
+  // Telefonda klaviatura darhol chiqib ketmasin — biroz kutamiz
+  setTimeout(() => $(first)?.focus(), 120);
+}
+
+function hideAuth() {
+  $("#authModal")?.classList.remove("active");
+}
+
+function showAuthError(selector, message) {
+  const box = $(selector);
 
   if (!box) return;
 
@@ -3733,61 +4040,554 @@ function showNameError(message) {
   box.classList.add("show");
 }
 
-async function submitName() {
-  const button = $("#continueBtn");
-  const input = $("#nameInput");
+function clearAuthError(selector) {
+  $(selector)?.classList.remove("show");
+}
 
-  const name = cleanUsername(input?.value);
+// Tugma ishlayotganda ikkinchi marta bosilmasin
+function busy(selector, on) {
+  const button = $(selector);
 
-  const problem = usernameProblem(name);
+  if (button) button.disabled = Boolean(on);
+}
 
-  if (problem) {
-    showNameError(problem);
-    input?.focus();
-    return;
-  }
+// ------------------------------------------------------------
+// SERVER BILAN GAPLASHISH
+// ------------------------------------------------------------
 
-  if (button) button.disabled = true;
-
-  let response;
-
+async function authCall(action, payload) {
   try {
-    response = await api("/api/register", { id: state.id, name });
+    return await api("/api/auth", Object.assign({ action }, payload));
   } catch {
-    if (button) button.disabled = false;
-    showNameError("Server bilan aloqa yo'q — internetni tekshiring");
-    return;
+    return {
+      ok: false,
+      status: 0,
+      data: { message: "Server bilan aloqa yo'q — internetni tekshiring" }
+    };
   }
+}
 
-  if (button) button.disabled = false;
-
-  const { ok, status, data } = response;
-
-  if (!ok) {
-    showNameError(
-      status === 409
-        ? "Bu username band. Boshqasini tanlang."
-        : data.message || "Server bilan aloqa yo'q"
-    );
-
-    return;
-  }
-
+// Kirish muvaffaqiyatli — o'yinni boshlaymiz
+function enterGame(data) {
   const player = data.player || {};
 
-  state.name = player.name || name;
-
-  saveStored("zonexName", state.name);
+  saveAccount(data.id, data.token, player.name);
 
   applyColor(player.color);
   setAvatar();
 
-  $("#nameError")?.classList.remove("show");
-  $("#welcomeModal")?.classList.remove("active");
+  hideAuth();
+
+  // Maydonlarni bo'shatamiz — parol ekranda qolib ketmasin
+  ["#loginPass", "#regPass", "#newPass", "#oldPass", "#changePass"].forEach(
+    (selector) => {
+      const input = $(selector);
+
+      if (input) input.value = "";
+    }
+  );
+
+  state.resetLogin = "";
+  state.resetTicket = "";
 
   startPolling();
 
   ensureLocation();
+}
+
+// ------------------------------------------------------------
+// RO'YXATDAN O'TISH
+// ------------------------------------------------------------
+
+async function submitRegister() {
+  clearAuthError("#regError");
+
+  const name = cleanUsername($("#regName")?.value);
+  const email = String($("#regEmail")?.value || "").trim();
+  const password = String($("#regPass")?.value || "");
+
+  const nameProblem = usernameProblem(name);
+
+  if (nameProblem) {
+    showAuthError("#regError", nameProblem);
+    $("#regName")?.focus();
+    return;
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    showAuthError("#regError", "Email manzili noto'g'ri — masalan: ism@gmail.com");
+    $("#regEmail")?.focus();
+    return;
+  }
+
+  const passProblem = passwordCheck(password, name).error;
+
+  if (passProblem) {
+    showAuthError("#regError", passProblem);
+    $("#regPass")?.focus();
+    return;
+  }
+
+  busy("#registerBtn", true);
+
+  const { ok, data } = await authCall("register", { name, email, password });
+
+  busy("#registerBtn", false);
+
+  if (!ok) {
+    showAuthError("#regError", data.message || "Ro'yxatdan o'tib bo'lmadi");
+    return;
+  }
+
+  enterGame(data);
+
+  toast("Xush kelibsiz, " + (data.player ? data.player.name : name) + "!");
+}
+
+// ------------------------------------------------------------
+// KIRISH
+// ------------------------------------------------------------
+
+async function submitLogin() {
+  clearAuthError("#loginError");
+
+  const login = String($("#loginName")?.value || "").trim();
+  const password = String($("#loginPass")?.value || "");
+
+  if (!login) {
+    showAuthError("#loginError", "Username yoki email yozing");
+    $("#loginName")?.focus();
+    return;
+  }
+
+  if (!password) {
+    showAuthError("#loginError", "Parolni yozing");
+    $("#loginPass")?.focus();
+    return;
+  }
+
+  busy("#loginBtn", true);
+
+  const { ok, data } = await authCall("login", { login, password });
+
+  busy("#loginBtn", false);
+
+  if (!ok) {
+    showAuthError("#loginError", data.message || "Kirib bo'lmadi");
+    return;
+  }
+
+  enterGame(data);
+}
+
+// ------------------------------------------------------------
+// PAROLNI TIKLASH — 1: emailga kod
+// ------------------------------------------------------------
+
+async function submitForgot(fromResend) {
+  const selector = fromResend ? "#codeError" : "#forgotError";
+
+  clearAuthError(selector);
+
+  const login = fromResend
+    ? state.resetLogin
+    : String($("#forgotName")?.value || "").trim();
+
+  if (!login) {
+    showAuthError(selector, "Username yoki email yozing");
+    $("#forgotName")?.focus();
+    return;
+  }
+
+  busy(fromResend ? "#resendBtn" : "#forgotBtn", true);
+
+  const { ok, data } = await authCall("forgot", { login });
+
+  busy(fromResend ? "#resendBtn" : "#forgotBtn", false);
+
+  if (!ok) {
+    showAuthError(selector, data.message || "Kod yuborilmadi");
+    return;
+  }
+
+  state.resetLogin = login;
+
+  if ($("#codeEmail")) {
+    $("#codeEmail").textContent = data.email || "emailingizga";
+  }
+
+  if (fromResend) {
+    toast("Yangi kod yuborildi");
+    return;
+  }
+
+  if ($("#codeInput")) $("#codeInput").value = "";
+
+  showAuth("code");
+
+  // Lokalda email sozlanmagan bo'lsa — kod serverning
+  // terminaliga chiqadi (o'zingiz sinash uchun)
+  if (data.dev) toast("Email sozlanmagan — kod server terminalida");
+}
+
+// ------------------------------------------------------------
+// PAROLNI TIKLASH — 2: kodni tekshirish
+// ------------------------------------------------------------
+
+async function submitCode() {
+  clearAuthError("#codeError");
+
+  const code = String($("#codeInput")?.value || "").replace(/\D/g, "");
+
+  if (code.length !== 6) {
+    showAuthError("#codeError", "Kod 6 xonali bo'lishi kerak");
+    $("#codeInput")?.focus();
+    return;
+  }
+
+  busy("#codeBtn", true);
+
+  const { ok, data } = await authCall("verify", {
+    login: state.resetLogin,
+    code
+  });
+
+  busy("#codeBtn", false);
+
+  if (!ok) {
+    showAuthError("#codeError", data.message || "Kod noto'g'ri");
+    return;
+  }
+
+  state.resetTicket = data.ticket || "";
+
+  if ($("#newPass")) $("#newPass").value = "";
+
+  renderPassMeter("#newPass", "#newMeter", "#newPassMsg", null);
+
+  showAuth("newpass");
+}
+
+// ------------------------------------------------------------
+// PAROLNI TIKLASH — 3: yangi parol
+// ------------------------------------------------------------
+
+async function submitNewPass() {
+  clearAuthError("#newError");
+
+  const password = String($("#newPass")?.value || "");
+
+  const problem = passwordCheck(password, state.resetLogin).error;
+
+  if (problem) {
+    showAuthError("#newError", problem);
+    $("#newPass")?.focus();
+    return;
+  }
+
+  busy("#newPassBtn", true);
+
+  const { ok, data } = await authCall("reset", {
+    login: state.resetLogin,
+    ticket: state.resetTicket,
+    password
+  });
+
+  busy("#newPassBtn", false);
+
+  if (!ok) {
+    showAuthError("#newError", data.message || "Parol saqlanmadi");
+    return;
+  }
+
+  enterGame(data);
+
+  toast("Parol yangilandi");
+}
+
+// ------------------------------------------------------------
+// PAROLNI ALMASHTIRISH (o'yin ichida)
+// ------------------------------------------------------------
+
+function openPassModal() {
+  ["#oldPass", "#changePass"].forEach((selector) => {
+    const input = $(selector);
+
+    if (input) input.value = "";
+  });
+
+  clearAuthError("#changeError");
+
+  renderPassMeter("#changePass", "#changeMeter", "#changePassMsg", null);
+
+  $("#passModal")?.classList.add("active");
+
+  setTimeout(() => $("#oldPass")?.focus(), 120);
+}
+
+function closePassModal() {
+  $("#passModal")?.classList.remove("active");
+}
+
+async function submitChangePass() {
+  clearAuthError("#changeError");
+
+  const oldPassword = String($("#oldPass")?.value || "");
+  const password = String($("#changePass")?.value || "");
+
+  if (!oldPassword) {
+    showAuthError("#changeError", "Hozirgi parolni yozing");
+    $("#oldPass")?.focus();
+    return;
+  }
+
+  const problem = passwordCheck(password, state.name).error;
+
+  if (problem) {
+    showAuthError("#changeError", problem);
+    $("#changePass")?.focus();
+    return;
+  }
+
+  busy("#changeBtn", true);
+
+  const { ok, data } = await authCall("change", {
+    id: state.id,
+    token: state.token,
+    oldPassword,
+    password
+  });
+
+  busy("#changeBtn", false);
+
+  if (!ok) {
+    showAuthError("#changeError", data.message || "Parol almashtirilmadi");
+    return;
+  }
+
+  // Server hamma qurilmalarni chiqarib yubordi va shu qurilma
+  // uchun yangi kalit berdi — uni saqlab qo'yamiz
+  saveAccount(data.id, data.token, data.player ? data.player.name : state.name);
+
+  closePassModal();
+
+  toast("Parol almashtirildi");
+}
+
+// ------------------------------------------------------------
+// CHIQISH
+// ------------------------------------------------------------
+
+async function logout() {
+  const id = state.id;
+  const token = state.token;
+
+  clearInterval(state.worldTimer);
+  clearInterval(state.chatListTimer);
+
+  closeProfile();
+
+  // Serverga xabar beramiz — token o'chsin. Internet bo'lmasa
+  // ham lokal kalitlarni baribir tozalaymiz.
+  if (id && token) {
+    authCall("logout", { id, token }).catch(() => {});
+  }
+
+  clearAccount();
+
+  showAuth("login");
+}
+
+// ------------------------------------------------------------
+// ILOVA OCHILGANDA — sessiya hali amal qiladimi?
+// ------------------------------------------------------------
+//
+// Qaytadi: true — o'ynash mumkin, false — kirish kerak
+// ------------------------------------------------------------
+
+async function checkSession() {
+  if (!state.id || !state.token) {
+    showAuth("login");
+    return false;
+  }
+
+  let response;
+
+  try {
+    response = await api("/api/auth", {
+      action: "session",
+      id: state.id,
+      token: state.token
+    });
+  } catch {
+    // Internet yo'q — saqlangan hududlar bilan lokal davom etadi
+    return true;
+  }
+
+  const { ok, data } = response;
+
+  if (ok && data.player) {
+    state.name = data.player.name || state.name;
+
+    saveStored("zonexName", state.name);
+
+    applyColor(data.player.color);
+    setAvatar();
+
+    hideAuth();
+
+    return true;
+  }
+
+  // Server vaqtincha yotgan bo'lsa (500) — saqlangan hududlar
+  // bilan lokal davom etaveramiz, kalitni o'chirmaymiz.
+  if (response.status >= 500 || response.status === 0) return true;
+
+  // Token eskirgan yoki akkaunt yo'q — kalitni tozalab,
+  // kirish oynasini ochamiz.
+  clearAccount();
+
+  showAuth("login");
+
+  if (data && data.message) showAuthError("#loginError", data.message);
+
+  return false;
+}
+
+// ------------------------------------------------------------
+// TUGMALAR
+// ------------------------------------------------------------
+
+function bindAuth() {
+  // ---- kirish ----
+  $("#loginBtn")?.addEventListener("click", submitLogin);
+
+  $("#loginName")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") $("#loginPass")?.focus();
+  });
+
+  $("#loginPass")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") submitLogin();
+  });
+
+  // ---- ro'yxatdan o'tish ----
+  $("#registerBtn")?.addEventListener("click", submitRegister);
+
+  $("#regName")?.addEventListener("input", (event) => {
+    const clean = cleanUsername(event.target.value);
+
+    if (event.target.value !== clean) event.target.value = clean;
+
+    clearAuthError("#regError");
+  });
+
+  $("#regEmail")?.addEventListener("input", () => clearAuthError("#regError"));
+
+  // Aynan shu yer: parol yozilayotganda pastda qizil yozuv
+  $("#regPass")?.addEventListener("input", () => {
+    clearAuthError("#regError");
+    renderPassMeter("#regPass", "#regMeter", "#regPassMsg", "#regName");
+  });
+
+  $("#regPass")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") submitRegister();
+  });
+
+  // ---- parolni tiklash ----
+  $("#forgotBtn")?.addEventListener("click", () => submitForgot(false));
+
+  $("#forgotName")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") submitForgot(false);
+  });
+
+  $("#codeBtn")?.addEventListener("click", submitCode);
+
+  $("#resendBtn")?.addEventListener("click", () => submitForgot(true));
+
+  $("#codeInput")?.addEventListener("input", (event) => {
+    const clean = event.target.value.replace(/\D/g, "").slice(0, 6);
+
+    if (event.target.value !== clean) event.target.value = clean;
+
+    clearAuthError("#codeError");
+
+    // 6 ta raqam yozilishi bilan o'zi tekshiradi
+    if (clean.length === 6) submitCode();
+  });
+
+  $("#newPass")?.addEventListener("input", () => {
+    clearAuthError("#newError");
+    renderPassMeter("#newPass", "#newMeter", "#newPassMsg", null);
+  });
+
+  $("#newPass")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") submitNewPass();
+  });
+
+  $("#newPassBtn")?.addEventListener("click", submitNewPass);
+
+  // ---- ekranlar orasida o'tish ----
+  $("#toRegister")?.addEventListener("click", () => showAuth("register"));
+  $("#toLogin")?.addEventListener("click", () => showAuth("login"));
+
+  $("#toForgot")?.addEventListener("click", () => {
+    // Kirish oynasiga yozilgan nomni olib qo'yamiz
+    if ($("#forgotName") && $("#loginName")) {
+      $("#forgotName").value = $("#loginName").value;
+    }
+
+    showAuth("forgot");
+  });
+
+  $("#authModal")?.addEventListener("click", (event) => {
+    const back = event.target.closest("[data-back]");
+
+    if (back) showAuth(back.dataset.back);
+  });
+
+  // ---- parolni ko'rsatish/yashirish ("ko'z") ----
+  document.addEventListener("click", (event) => {
+    const eye = event.target.closest("[data-eye]");
+
+    if (!eye) return;
+
+    const input = $("#" + eye.dataset.eye);
+
+    if (!input) return;
+
+    const show = input.type === "password";
+
+    input.type = show ? "text" : "password";
+
+    eye.classList.toggle("on", show);
+
+    eye.setAttribute(
+      "aria-label",
+      show ? "Parolni yashirish" : "Parolni ko'rsatish"
+    );
+  });
+
+  // ---- parolni almashtirish oynasi ----
+  $("#closePass")?.addEventListener("click", closePassModal);
+
+  $("#passModal")?.addEventListener("click", (event) => {
+    if (event.target === $("#passModal")) closePassModal();
+  });
+
+  $("#changeBtn")?.addEventListener("click", submitChangePass);
+
+  $("#changePass")?.addEventListener("input", () => {
+    clearAuthError("#changeError");
+    renderPassMeter("#changePass", "#changeMeter", "#changePassMsg", null);
+  });
+
+  $("#changePass")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") submitChangePass();
+  });
+
+  $("#oldPass")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") $("#changePass")?.focus();
+  });
 }
 
 function setAvatar() {
@@ -3815,58 +4615,13 @@ function setAvatar() {
   }
 }
 
-// Eski akkauntni server bilan moslash (username qayta so'ralmaydi)
-async function syncAccount() {
-  let response;
-
-  try {
-    response = await api("/api/register", { id: state.id, name: state.name });
-  } catch {
-    return true; // internet yo'q — o'yin lokal davom etadi
-  }
-
-  const { ok, status, data } = response;
-
-  if (ok && data.player) {
-    state.name = data.player.name || state.name;
-
-    saveStored("zonexName", state.name);
-
-    applyColor(data.player.color);
-    setAvatar();
-
-    return true;
-  }
-
-  // Username band bo'lib qolgan bo'lsa — bir marta qayta so'raymiz
-  if (status === 409) {
-    showNameError("Bu username band. Boshqasini tanlang.");
-    $("#welcomeModal")?.classList.add("active");
-
-    return false;
-  }
-
-  return true; // server yotgan bo'lsa ham o'yin davom etadi
-}
-
 // ============================================================
 // TUGMALAR
 // ============================================================
 
 function bindButtons() {
-  $("#continueBtn")?.addEventListener("click", submitName);
-
-  $("#nameInput")?.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") submitName();
-  });
-
-  $("#nameInput")?.addEventListener("input", (event) => {
-    const clean = cleanUsername(event.target.value);
-
-    if (event.target.value !== clean) event.target.value = clean;
-
-    $("#nameError")?.classList.remove("show");
-  });
+  // Kirish / ro'yxat / parolni tiklash
+  bindAuth();
 
   $("#allowBtn")?.addEventListener("click", requestLocation);
 
@@ -3908,8 +4663,8 @@ function bindButtons() {
 
   // O'z profilim
   $("#profileBtn")?.addEventListener("click", () => {
-    if (!state.name) {
-      $("#welcomeModal")?.classList.add("active");
+    if (!state.id || !state.token) {
+      showAuth("login");
       return;
     }
 
@@ -4012,18 +4767,15 @@ async function boot() {
   // Saqlangan hududlarim darhol ko'rinsin
   renderWorld([]);
 
-  if (!state.name) {
-    // Faqat birinchi kirishda
-    $("#welcomeModal")?.classList.add("active");
-    return;
-  }
+  // Saqlangan sessiya hali amal qiladimi? Amal qilmasa
+  // `checkSession` kirish oynasini o'zi ochadi.
+  const okAccount = await checkSession();
 
-  // Username bor — hech narsa so'ramaymiz
-  const okAccount = await syncAccount();
+  if (!okAccount) return;
 
   startPolling();
 
-  if (okAccount) ensureLocation();
+  ensureLocation();
 }
 
 if (document.readyState === "loading") {

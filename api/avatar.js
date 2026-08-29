@@ -34,6 +34,8 @@ const {
   RULES
 } = require("./_store");
 
+const { guard } = require("./_auth");
+
 // Faqat oddiy rasm formatlari
 const ALLOWED = /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/;
 
@@ -85,11 +87,16 @@ async function handler(req, res) {
 
     const players = await readPlayers();
 
-    const player = players[id];
+    const check = guard(players, id, req, body);
 
-    if (!player) {
-      return json(res, 400, { error: "Avval ro'yxatdan o'ting" });
+    if (!check.ok) {
+      return json(res, check.status, {
+        error: check.error,
+        message: check.message
+      });
     }
+
+    const player = check.player;
 
     const avatar = String(body.avatar || "");
 

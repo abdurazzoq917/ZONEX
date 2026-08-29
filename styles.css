@@ -1461,3 +1461,206 @@
   background: #f0f0f2;
   color: var(--muted);
 }
+
+/* ===============================
+   AKKAUNT OYNASI
+   (kirish / ro'yxat / parolni tiklash)
+   =============================== */
+
+/* Bir vaqtda faqat bitta ekran ko'rinadi */
+.auth-screen {
+  display: none;
+}
+
+.modal-card.auth[data-screen="login"]    [data-pane="login"],
+.modal-card.auth[data-screen="register"] [data-pane="register"],
+.modal-card.auth[data-screen="forgot"]   [data-pane="forgot"],
+.modal-card.auth[data-screen="code"]     [data-pane="code"],
+.modal-card.auth[data-screen="newpass"]  [data-pane="newpass"] {
+  display: block;
+}
+
+/* Ketma-ket kelgan maydonlar orasidagi bo'shliq */
+.modal label.mt {
+  margin-top: 14px;
+}
+
+/* ---- Parol maydoni: ichida "ko'z" tugmasi ---- */
+
+.pass-wrap {
+  position: relative;
+}
+
+.pass-wrap input {
+  padding-right: 46px;
+}
+
+.eye {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font-size: 14px;
+  line-height: 1;
+  opacity: .42;
+  cursor: pointer;
+}
+
+.eye:hover {
+  background: var(--hover-tint);
+}
+
+/* Parol ochiq turganda ko'z "yoqilgan" ko'rinadi */
+.eye.on {
+  opacity: 1;
+}
+
+/* ---- Parol kuchi ---- */
+
+.pass-meter {
+  display: flex;
+  gap: 4px;
+  margin: 8px 3px 0;
+}
+
+.pass-meter i {
+  height: 3px;
+  flex: 1;
+  border-radius: 3px;
+  background: var(--border);
+  transition: background .18s;
+}
+
+/* Zaif — qizil (faqat bitta bo'lak) */
+.pass-meter[data-level="weak"] i:nth-child(1) {
+  background: var(--red);
+}
+
+/* O'rtacha — sariq (ikkita bo'lak) */
+.pass-meter[data-level="medium"] i:nth-child(-n + 2) {
+  background: #f2a33c;
+}
+
+/* Kuchli — yashil (hammasi) */
+.pass-meter[data-level="strong"] i {
+  background: #1faa5a;
+}
+
+/* Parol haqidagi yozuv.
+   Qoida buzilgan bo'lsa — QIZIL (masalan: parol faqat raqamdan
+   iborat). Aks holda kuch darajasiga qarab rang oladi. */
+.pass-msg {
+  display: none;
+  margin: 6px 3px 0;
+  font-size: 8px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.pass-msg.show {
+  display: block;
+}
+
+.pass-msg.bad {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.pass-msg.medium {
+  color: #b9741f;
+}
+
+.pass-msg.strong {
+  color: #17864a;
+}
+
+/* ---- Ekranlar orasida o'tish ---- */
+
+.auth-swap {
+  text-align: center;
+  font-size: 9px;
+  color: var(--muted);
+  margin: 12px 0 0;
+}
+
+.auth-swap button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 9px;
+  font-weight: 900;
+  color: var(--blue);
+  cursor: pointer;
+}
+
+/* ---- Tasdiqlash kodi maydoni ---- */
+
+.code-input {
+  text-align: center;
+  font-size: 26px !important;
+  font-weight: 800;
+  letter-spacing: 10px;
+  padding: 16px 15px !important;
+}
+
+.code-input::placeholder {
+  letter-spacing: 10px;
+  opacity: .28;
+}
+
+/* Tugma ishlayotganda ikki marta bosilmasin */
+.primary:disabled,
+.text-btn:disabled {
+  opacity: .5;
+  pointer-events: none;
+}
+
+/* ---- Profildagi xavfsizlik bo'limi ---- */
+
+.account-box {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.account-box .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.account-box .row + .row {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--divider);
+}
+
+.account-box b {
+  color: var(--ink);
+  font-size: 9px;
+}
+
+.account-box button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 9px;
+  font-weight: 900;
+  color: var(--blue);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.account-box button.danger {
+  color: var(--red);
+}

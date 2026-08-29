@@ -165,10 +165,27 @@ Upstash sahifasidagi **REST API** bo'limidan olingan qiymatlarni qo'ying.
 
 | Yo'l | Metod | Vazifasi |
 | --- | --- | --- |
-| `/api/register` | POST | Akkaunt yaratish / tiklash |
+| `/api/auth` | POST | Ro'yxat, kirish, chiqish, parolni tiklash |
 | `/api/location` | POST | Jonli joylashuvni yuborish |
 | `/api/territory` | POST | Hudud yopish, bosib olish |
 | `/api/world` | GET | Barcha o'yinchilar va hududlar |
+
+`/api/world` dan boshqa hammasi **token** talab qiladi — u
+`x-zonex-token` sarlavhasida yuriladi. Tokenni `/api/auth` beradi
+(kirish yoki ro'yxatdan o'tishda).
+
+### `/api/auth` amallari
+
+| `action` | Nima yuboriladi | Nima qaytadi |
+| --- | --- | --- |
+| `register` | `name`, `email`, `password` | `id`, `token`, `player` |
+| `login` | `login` (username yoki email), `password` | `id`, `token`, `player` |
+| `session` | `id`, `token` | Token hali amal qiladimi |
+| `logout` | `id`, `token` | Shu qurilma tokenini o'chiradi |
+| `forgot` | `login` | Emailga 6 xonali kod yuboradi |
+| `verify` | `login`, `code` | Bir martalik `ticket` |
+| `reset` | `login`, `ticket`, `password` | Yangi parol + yangi `token` |
+| `change` | `id`, `token`, `oldPassword`, `password` | Yangi `token` |
 
 ## Fayllar
 
@@ -178,6 +195,9 @@ Upstash sahifasidagi **REST API** bo'limidan olingan qiymatlarni qo'ying.
 | `styles.css` | Dizayn |
 | `client.js` | Xarita, GPS, tezlik nazorati, jonli odamlar |
 | `api/_store.js` | Ma'lumotlar ombori, ranglar, geometriya, qoidalar |
+| `api/_auth.js` | Parol (scrypt), sessiya tokenlari, tiklash kodi |
+| `api/_mail.js` | Gmail SMTP orqali xat yuborish |
+| `scripts/reset-db.js` | `npm run reset-db` — bazani tozalash |
 | `api/_http.js` | CORS va JSON yordamchilari |
 | `local-server.js` | Lokal server (`api/` fayllarining aynan o'zini ishlatadi) |
 | `api/_env.js` | Lokalda `.env` faylini o'qiydi |

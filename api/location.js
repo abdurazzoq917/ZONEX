@@ -1,6 +1,7 @@
 // api/location.js
 // ============================================================
-// POST /api/location  { id, name, lat, lng, accuracy }
+// POST /api/location  { id, lat, lng, accuracy }
+// Sarlavha: x-zonex-token
 //
 // Jonli joylashuvni yangilaydi va butun dunyoni qaytaradi,
 // shuning uchun odamlar bir-birini deyarli darhol ko'radi.
@@ -10,17 +11,13 @@ const { json, preflight, readBody } = require("./_http");
 
 const {
   readPlayers,
-  writePlayers,
   writeLive,
-  withLock,
-  createPlayer,
-  normalizeName,
-  isNameTaken,
   distanceMeters,
   publicPlayer,
-  publicList,
-  RULES
+  publicList
 } = require("./_store");
+
+const { guard } = require("./_auth");
 
 // Ikki GPS nuqtasi orasidagi eng katta ishonchli qadam (metr)
 const MAX_STEP = 500;
@@ -36,14 +33,8 @@ module.exports = async function handler(req, res) {
     const body = await readBody(req);
 
     const id = String(body.id || "").trim();
-    const name = normalizeName(body.name);
-
     const lat = Number(body.lat);
     const lng = Number(body.lng);
-
-    if (!id) {
-      return json(res, 400, { error: "Qurilma ID kerak" });
-    }
 
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       return json(res, 400, { error: "GPS koordinatalari noto'g'ri" });
@@ -57,35 +48,20 @@ module.exports = async function handler(req, res) {
 
     const players = await readPlayers();
 
-    let player = players[id];
+    // Akkaunt shu yerda YARATILMAYDI — u faqat /api/auth orqali
+    // (parol va email bilan) tug'iladi. Bu yerda esa token
+    // tekshiriladi: birovning ID'sini bilgan odam uning
+    // joylashuvini soxtalashtira olmasin.
+    const check = guard(players, id, req, body);
 
-    if (!player) {
-      if (!name) {
-        return json(res, 400, { error: "Avval ro'yxatdan o'ting" });
-      }
-
-      if (isNameTaken(players, name, id)) {
-        return json(res, 409, {
-          error: "name_taken",
-          message: "Bu ism band. Boshqa ism tanlang."
-        });
-      }
-
-      // Yangi akkaunt yaratish — kamdan-kam bo'ladi, qulf ostida
-      player = await withLock("players", async () => {
-        const fresh = await readPlayers();
-
-        if (fresh[id]) return fresh[id];
-
-        const made = createPlayer(id, name);
-
-        await writePlayers(made);
-
-        return made;
+    if (!check.ok) {
+      return json(res, check.status, {
+        error: check.error,
+        message: check.message
       });
-
-      players[id] = player;
     }
+
+    const player = check.player;
 
     // ---------------------------------------------------------
     // Yurgan masofa (faqat ishonchli qadamlar)
