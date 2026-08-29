@@ -1456,6 +1456,56 @@ async function appendMessage(a, b, message) {
   return list;
 }
 
+// ============================================================
+// AKKAUNTNI O'CHIRISH
+// ============================================================
+//
+// O'yinchi yozuvi, joylashuvi va profil rasmi bilan birga
+// o'chadi. Yozishmalar tegilmaydi — ular juft kalitda yotadi
+// va ikkinchi tarafga ham tegishli.
+// ============================================================
+
+async function deletePlayers(ids) {
+  const list = (Array.isArray(ids) ? ids : [ids])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+
+  if (!list.length) return 0;
+
+  if (USE_REDIS) {
+    const commands = [];
+
+    list.forEach((id) => {
+      commands.push(["DEL", PLAYER_KEY(id)]);
+      commands.push(["DEL", LIVE_KEY(id)]);
+      commands.push(["DEL", AVATAR_KEY(id)]);
+      commands.push(["SREM", IDS_KEY, id]);
+    });
+
+    await redisPipeline(commands);
+
+    return list.length;
+  }
+
+  const raw = fileReadRaw();
+
+  const gone = new Set(list);
+
+  if (Array.isArray(raw.players)) {
+    raw.players = raw.players.filter((p) => p && !gone.has(String(p.id)));
+  }
+
+  ["avatars", "live"].forEach((box) => {
+    if (raw[box] && typeof raw[box] === "object") {
+      list.forEach((id) => delete raw[box][id]);
+    }
+  });
+
+  fileWriteRaw(raw);
+
+  return list.length;
+}
+
 // Ism band emasmi? (o'zinikidan boshqa odamda bormi)
 function isNameTaken(players, name, ownId) {
   const key = nameKey(name);
@@ -1518,6 +1568,7 @@ module.exports = {
   storageReport,
 
   writeLive,
+  deletePlayers,
   readAvatar,
   writeAvatar,
   withLock,

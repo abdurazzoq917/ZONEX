@@ -21,3 +21,6 @@ android/.gradle/
 android/local.properties
 android/app/*.keystore
 android/app/*.jks
+
+.vercel
+.env*
