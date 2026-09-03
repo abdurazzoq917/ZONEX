@@ -21,7 +21,9 @@ const {
   banInfo,
   publicList,
   daily,
-  notify
+  notify,
+  level,
+  stats
 } = require("./_store");
 
 const { guard } = require("./_auth");
@@ -44,6 +46,12 @@ function add(list, value) {
 function becameFriends(me, other) {
   daily.bump(me, "friends", 1);
   daily.bump(other, "friends", 1);
+
+  // Ikkalasiga ham XP — do'stlashish o'yinni jonlantiradi
+  [me, other].forEach((player) => {
+    level.addXp(player, level.XP.FRIEND, "friend");
+    stats.bumpAll(player, { xp: level.XP.FRIEND });
+  });
 
   notify.notify(other, {
     type: "friend_ok",

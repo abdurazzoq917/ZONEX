@@ -1875,7 +1875,10 @@
   color: var(--muted);
 }
 
-.points-new {
+/* Kichkina nuqta — son ko'rsatilmaydi. Selektor `.points-btn em`
+   dan aniqroq bo'lishi kerak, aks holda o'sha 17px o'lchamni
+   bosib ketadi. */
+.points-btn em.points-new {
   width: 10px;
   height: 10px;
   min-width: 10px;
@@ -2605,4 +2608,864 @@
   transform: none;
   padding-top: max(10px, env(safe-area-inset-top));
   z-index: 2100;
+}
+
+/* ===============================
+   MENYUDAGI YANGI RANGLAR
+   =============================== */
+
+.menu-ico.rk { background: #16a34a }
+.menu-ico.cl { background: #b91c1c }
+.menu-ico.mp { background: #7c3aed }
+.menu-ico.pl { background: linear-gradient(135deg, #f59e0b, #ef4444) }
+.menu-ico.pv { background: #0f766e }
+.menu-ico.ad { background: #1d4ed8 }
+.menu-ico.am { background: #111827 }
+
+.menu-row.plus-row {
+  background: linear-gradient(100deg, #fff7ed, #fef2f2);
+}
+
+/* ===============================
+   BREND: ZONEX -> ZONEX PLUS
+   =============================== */
+
+.brand b {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 2px 5px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: #fff;
+  font: 900 8px Manrope, system-ui, sans-serif;
+  font-style: normal;
+  letter-spacing: .6px;
+  vertical-align: middle;
+}
+
+.brand.is-plus {
+  box-shadow: 0 5px 18px rgba(245, 158, 11, .35);
+}
+
+/* ===============================
+   DARAJA CHIZIG'I
+   =============================== */
+
+.level-bar {
+  position: fixed;
+  z-index: 440;
+  top: calc(max(16px, env(safe-area-inset-top)) + 58px);
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 11px 7px 7px;
+  border-radius: 14px;
+  background: var(--panel-solid);
+  box-shadow: 0 5px 18px rgba(18, 23, 39, .12);
+  pointer-events: auto;
+}
+
+@media (min-width: 700px) {
+  .level-bar {
+    left: 50%;
+    right: auto;
+    width: 430px;
+    transform: translateX(-50%);
+  }
+}
+
+.lvl-map {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 4px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-2);
+  cursor: pointer;
+  max-width: 42%;
+}
+
+.lvl-map i {
+  width: 20px;
+  height: 20px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-style: normal;
+  color: #fff;
+}
+
+.lvl-map span {
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lvl-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.lvl-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.lvl-head b {
+  font-size: 9px;
+}
+
+.lvl-head em {
+  font-style: normal;
+  font-size: 7px;
+  color: var(--muted);
+}
+
+.lvl-track {
+  height: 5px;
+  border-radius: 3px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.lvl-track i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #22c55e, #3b82f6);
+  transition: width .4s ease;
+}
+
+/* Daraja chizig'i qo'shilgani uchun kartochka pastroqqa suriladi */
+.area-card {
+  top: 132px;
+}
+
+/* ===============================
+   DARAJA OSHDI
+   =============================== */
+
+.level-up {
+  position: fixed;
+  z-index: 3200;
+  left: 50%;
+  top: 30%;
+  transform: translate(-50%, -20px) scale(.9);
+  opacity: 0;
+  pointer-events: none;
+  transition: .35s cubic-bezier(.2, 1.2, .4, 1);
+}
+
+.level-up.show {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.up-card {
+  padding: 22px 30px;
+  border-radius: 22px;
+  text-align: center;
+  background: linear-gradient(135deg, #111827, #4c1d95);
+  color: #fff;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .4);
+}
+
+.up-card b {
+  display: block;
+  font-size: 26px;
+  letter-spacing: -1px;
+}
+
+.up-card span {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+  opacity: .8;
+}
+
+/* ===============================
+   HUDUD USTIDAGI DARAJA VA HIMOYA
+   =============================== */
+
+.zone-lvl {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font: 900 8px Manrope, system-ui, sans-serif;
+  font-style: normal;
+  color: #fff;
+  background: #64748b;
+  text-shadow: none;
+}
+
+.zone-lvl.l2 { background: #3b82f6 }
+.zone-lvl.l3 { background: #8b5cf6 }
+.zone-lvl.l4 { background: #f59e0b }
+.zone-lvl.l5 { background: #ef4444 }
+
+.zone-guard {
+  display: block;
+  margin-top: 2px;
+  font: 800 8px Manrope, system-ui, sans-serif;
+  font-style: normal;
+}
+
+.zone-guard.on { color: #15803d }
+.zone-guard.hot { color: #b91c1c }
+.zone-guard.off { color: #94a3b8 }
+
+/* ===============================
+   UY BELGILASH
+   =============================== */
+
+#homeModal.must .sheet-back {
+  display: none;
+}
+
+.home-pick {
+  position: relative;
+  flex: none;
+  height: 240px;
+}
+
+#homeMap {
+  width: 100%;
+  height: 100%;
+}
+
+.home-cross {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 500;
+  font-size: 30px;
+  color: var(--red);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+  pointer-events: none;
+}
+
+.zonex-home-marker .zx-home {
+  transform: translate(-50%, -100%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 5px;
+  border-radius: 10px;
+  background: #f59e0b;
+  color: #fff;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+}
+
+.zonex-home-marker b {
+  font-size: 13px;
+}
+
+.zonex-home-marker span {
+  font: 800 9px Manrope, system-ui, sans-serif;
+}
+
+/* ===============================
+   XARITA TANLASH
+   =============================== */
+
+.map-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  margin-bottom: 9px;
+  border: 1.5px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-row.active {
+  border-color: var(--blue);
+  background: #eef2ff;
+}
+
+.map-row.locked {
+  opacity: .55;
+  cursor: default;
+}
+
+.map-ico {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-style: normal;
+  color: #fff;
+}
+
+.map-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.map-text strong {
+  display: block;
+  font-size: 11px;
+}
+
+.map-text small {
+  display: block;
+  margin-top: 2px;
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.map-tag {
+  flex: none;
+  font-size: 7.5px;
+  font-weight: 900;
+  letter-spacing: .5px;
+  color: #16a34a;
+}
+
+.map-tag.on { color: var(--blue) }
+.map-tag.off { color: var(--muted) }
+
+/* ===============================
+   REYTING
+   =============================== */
+
+.sheet-tabs.small button {
+  padding: 8px;
+  font-size: 8px;
+}
+
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 7px;
+  border-radius: 13px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.rank-row.me {
+  background: #eef2ff;
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.rank-place {
+  flex: none;
+  width: 24px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.rank-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.rank-name small {
+  display: block;
+  margin-top: 2px;
+  font-size: 7.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.rank-val {
+  flex: none;
+  text-align: right;
+}
+
+.rank-val b {
+  display: block;
+  font-size: 11px;
+}
+
+.rank-val small {
+  font-size: 7px;
+  color: var(--muted);
+}
+
+.plus-dot {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: #fff;
+  font: 900 6.5px Manrope, system-ui, sans-serif;
+  font-style: normal;
+  vertical-align: middle;
+}
+
+.clan-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.city-board {
+  margin-bottom: 6px;
+}
+
+.city-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background: linear-gradient(100deg, #f8fafc, #eef2ff);
+  font-size: 9.5px;
+}
+
+.city-row.me {
+  background: linear-gradient(100deg, #fef3c7, #fde68a);
+}
+
+.city-row b {
+  width: 14px;
+  color: var(--muted);
+}
+
+.city-row span {
+  flex: 1;
+  font-weight: 800;
+}
+
+.city-row i {
+  font-style: normal;
+  font-weight: 800;
+  color: var(--blue);
+}
+
+.city-row em {
+  font-style: normal;
+  font-size: 7.5px;
+  color: var(--muted);
+}
+
+/* ===============================
+   KLANLAR
+   =============================== */
+
+.clan-head {
+  padding: 18px 16px;
+  margin-bottom: 12px;
+  border-radius: 18px;
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(135deg, #111827, var(--clan, #ef4444));
+}
+
+.clan-head b {
+  font-size: 11px;
+  opacity: .8;
+  letter-spacing: 1px;
+}
+
+.clan-head strong {
+  display: block;
+  margin: 4px 0;
+  font-size: 22px;
+  letter-spacing: -1px;
+}
+
+.clan-head small {
+  display: block;
+  font-size: 9px;
+  opacity: .75;
+}
+
+.clan-stats {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 14px;
+}
+
+.clan-stats span {
+  font-size: 7.5px;
+  opacity: .75;
+}
+
+.clan-stats b {
+  display: block;
+  font-size: 14px;
+  opacity: 1;
+}
+
+.clan-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 7px;
+  border-radius: 13px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.clan-kick {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: var(--red);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.clan-new {
+  padding: 14px;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.mini.ok,
+.mini.no {
+  border: 0;
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 8px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.mini.ok { background: #16a34a; color: #fff }
+.mini.no { background: #fee2e2; color: var(--red) }
+
+/* ===============================
+   ZONEX PLUS
+   =============================== */
+
+.plus-hero {
+  padding: 24px 18px;
+  border-radius: 20px;
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(135deg, #111827, #4c1d95);
+}
+
+.plus-hero.on {
+  background: linear-gradient(135deg, #b45309, #ef4444);
+}
+
+.plus-logo {
+  font-size: 20px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -1.5px;
+}
+
+.plus-logo span { color: #93c5fd }
+.plus-logo i { color: #fca5a5; font-style: italic }
+
+.plus-logo b {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 3px 7px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .18);
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 1px;
+  vertical-align: middle;
+}
+
+.plus-hero h3 {
+  margin: 14px 0 3px;
+  font-size: 30px;
+  letter-spacing: -1.4px;
+}
+
+.plus-hero p {
+  margin: 0;
+  font-size: 10px;
+  opacity: .7;
+}
+
+.perks {
+  margin: 14px 0;
+}
+
+.perk {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 12px;
+  margin-bottom: 7px;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.perk i {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 13px;
+  color: #fff;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+}
+
+.perk strong {
+  display: block;
+  font-size: 10px;
+}
+
+.perk small {
+  display: block;
+  margin-top: 2px;
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.frame-grid,
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.frame-pick,
+.theme-pick {
+  border: 1.5px solid var(--border);
+  border-radius: 13px;
+  padding: 9px 4px;
+  background: var(--surface-2);
+  cursor: pointer;
+  text-align: center;
+}
+
+.frame-pick.on,
+.theme-pick.on {
+  border-color: var(--blue);
+  background: #eef2ff;
+}
+
+.frame-pick i,
+.theme-pick i {
+  display: block;
+  width: 28px;
+  height: 28px;
+  margin: 0 auto 5px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.theme-pick i {
+  border-radius: 8px;
+  background: linear-gradient(135deg, #86efac, #93c5fd, #fca5a5);
+}
+
+.frame-pick span,
+.theme-pick span {
+  font-size: 7px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.fr-gold { box-shadow: 0 0 0 3px #f59e0b }
+.fr-neon { box-shadow: 0 0 0 3px #22d3ee, 0 0 12px #22d3ee }
+.fr-fire { box-shadow: 0 0 0 3px #ef4444 }
+.fr-ice  { box-shadow: 0 0 0 3px #7dd3fc }
+
+/* Profil ramkasi — avatar atrofida */
+body[data-frame="gold"] .avatar { box-shadow: 0 0 0 3px #f59e0b, 0 4px 14px #1217272c }
+body[data-frame="neon"] .avatar { box-shadow: 0 0 0 3px #22d3ee, 0 0 14px #22d3ee }
+body[data-frame="fire"] .avatar { box-shadow: 0 0 0 3px #ef4444, 0 4px 14px #1217272c }
+body[data-frame="ice"]  .avatar { box-shadow: 0 0 0 3px #7dd3fc, 0 4px 14px #1217272c }
+
+/* ===============================
+   HAMKOR TAKLIFI (REKLAMA)
+   =============================== */
+
+.zonex-place-marker .zx-place {
+  transform: translate(-50%, -100%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 5px;
+  border-radius: 10px;
+  background: #1d4ed8;
+  color: #fff;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+  cursor: pointer;
+}
+
+.zonex-place-marker span {
+  font: 800 9px Manrope, system-ui, sans-serif;
+}
+
+.offer-card {
+  position: fixed;
+  z-index: 1500;
+  left: 16px;
+  right: 16px;
+  bottom: 250px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #1d4ed8, #7c3aed);
+  color: #fff;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .3);
+  transform: translateY(24px);
+  opacity: 0;
+  pointer-events: none;
+  transition: .3s ease;
+}
+
+.offer-card.show {
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (min-width: 700px) {
+  .offer-card {
+    left: 50%;
+    right: auto;
+    width: 380px;
+    transform: translateX(-50%) translateY(24px);
+  }
+
+  .offer-card.show {
+    transform: translateX(-50%);
+  }
+}
+
+.offer-x {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .18);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.offer-tag {
+  display: inline-block;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .2);
+  font-size: 6.5px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.offer-card strong {
+  display: block;
+  margin: 7px 0 3px;
+  font-size: 14px;
+}
+
+.offer-card p {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.5;
+  opacity: .9;
+}
+
+.offer-card small {
+  display: block;
+  margin-top: 5px;
+  font-size: 8px;
+  opacity: .7;
+}
+
+/* ===============================
+   ADMIN PANEL
+   =============================== */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.stat {
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.stat b {
+  display: block;
+  font-size: 20px;
+  letter-spacing: -1px;
+}
+
+.stat span {
+  display: block;
+  margin-top: 2px;
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.stat small {
+  font-size: 7px;
+  color: var(--muted);
+}
+
+.pay-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  border-radius: 13px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  font-size: 9.5px;
+}
+
+.pay-row small {
+  display: block;
+  margin-top: 3px;
+  font-size: 7.5px;
+  color: var(--muted);
+}
+
+.pay-acts {
+  flex: none;
+  display: flex;
+  gap: 6px;
 }

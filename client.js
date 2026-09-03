@@ -218,8 +218,15 @@ const state = {
   resetTicket: "",
 
   map: null,
+  tiles: null,
   marker: null,
   accuracyRing: null,
+
+  // Qaysi xaritada o'ynayapmiz (Beginner / City / ...)
+  mapId: loadStored("zonexMap") || "beginner",
+
+  // Uy belgilangan bo'lsa — xaritadagi belgisi
+  homeMarker: null,
 
   watchId: null,
   lastFix: null,
@@ -564,14 +571,21 @@ function initMap(center) {
     maxZoom: CONFIG.MAX_ZOOM
   }).setView(center || [41.3111, 69.2797], 16);
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    // maxNativeZoom — plitkalar shu darajagacha mavjud.
-    // Undan yaqinroq kelinsa, plitka cho'ziladi (oqarib qolmaydi).
-    maxZoom: CONFIG.MAX_ZOOM,
-    maxNativeZoom: CONFIG.TILE_ZOOM,
-    keepBuffer: 4,
-    attribution: "© OpenStreetMap"
-  }).addTo(state.map);
+  // Plitka qatlamini saqlab qo'yamiz: ZoneX Plus egalari xarita
+  // ko'rinishini almashtira oladi (hub.js -> applyMapTheme).
+  state.tiles = L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+      // maxNativeZoom — plitkalar shu darajagacha mavjud.
+      // Undan yaqinroq kelinsa, plitka cho'ziladi (oqarib qolmaydi).
+      maxZoom: CONFIG.MAX_ZOOM,
+      maxNativeZoom: CONFIG.TILE_ZOOM,
+      keepBuffer: 4,
+      attribution: "© OpenStreetMap"
+    }
+  ).addTo(state.map);
+
+  if (window.ZONEX_HUB) window.ZONEX_HUB.onMap();
 }
 
 // ============================================================
@@ -690,6 +704,8 @@ function zoneShape(territory) {
 
 // Hududning ustidagi yozuv o'zgardimi (user, masofa, rasm, toj)
 function zoneLabelStamp(territory, player) {
+  const guard = territory.defense || {};
+
   return (
     String(player.name) +
     "|" +
@@ -701,8 +717,61 @@ function zoneLabelStamp(territory, player) {
     "|" +
     (avatarOf(player) ? "1" : "0") +
     "|" +
-    (isKing(player) ? "k" : "-")
+    (isKing(player) ? "k" : "-") +
+    "|" +
+    String(guard.level || 1) +
+    "|" +
+    String(guard.state || "") +
+    // Soat har sekundda o'zgarmasin — daqiqa aniqligida
+    "|" +
+    String(Math.floor((guard.left || 0) / 60000))
   );
+}
+
+// ------------------------------------------------------------
+// HIMOYA SOATI
+// ------------------------------------------------------------
+//
+// Himoyadagi hudud ustida qolgan vaqt turadi:
+//
+//    🛡 12:43:21
+//
+// Himoya tugagach uning o'rniga "⚔ ochiq" yoziladi — demak
+// hududni boshqalar egallashi mumkin.
+// ------------------------------------------------------------
+
+function guardText(ms) {
+  const total = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+
+  const pad = (value) => String(value).padStart(2, "0");
+
+  return (
+    pad(Math.floor(total / 3600)) +
+    ":" +
+    pad(Math.floor((total % 3600) / 60)) +
+    ":" +
+    pad(total % 60)
+  );
+}
+
+function guardHtml(territory) {
+  const guard = territory.defense;
+
+  if (!guard) return "";
+
+  if (guard.state === "DEFENDED") {
+    return (
+      '<i class="zone-guard on">\u{1F6E1} ' +
+      esc(guardText(guard.left)) +
+      "</i>"
+    );
+  }
+
+  if (guard.state === "CONTESTED") {
+    return '<i class="zone-guard hot">\u2694 jang</i>';
+  }
+
+  return '<i class="zone-guard off">\u2694 ochiq</i>';
 }
 
 // Hudud uchun yurilgan masofa. Eski hududlarda saqlanmagan
@@ -763,6 +832,15 @@ function zoneLabelHtml(territory, player) {
     '<i class="zone-dist">' +
     esc(distanceText(zoneDistance(territory))) +
     "</i>" +
+    // Hudud darajasi va himoya soati
+    (territory.defense
+      ? '<i class="zone-lvl l' +
+        (territory.defense.level || 1) +
+        '">L' +
+        (territory.defense.level || 1) +
+        "</i>"
+      : "") +
+    guardHtml(territory) +
     "</span>"
   );
 }
@@ -1144,9 +1222,10 @@ function updateMyCard(me, mine) {
 
   setAvatar();
 
+  // Daraja endi maydondan emas, SERVERDAN keladi (XP bo'yicha)
   if ($("#levelBadge")) {
     $("#levelBadge").textContent = String(
-      Math.max(1, Math.floor(rounded / 5000) + 1)
+      me && Number(me.level) ? Number(me.level) : 1
     );
   }
 }
@@ -1203,6 +1282,7 @@ function sessionLost(message) {
   if (!state.id && !state.token) return; // allaqachon chiqarilgan
 
   if (window.ZONEX_GAME) window.ZONEX_GAME.stop();
+  if (window.ZONEX_HUB) window.ZONEX_HUB.stop();
 
   clearAccount();
 
@@ -1223,10 +1303,24 @@ async function fetchWorld() {
   try {
     // ?id= — o'zimga kelgan do'stlik so'rovlari ham qaytadi
     const { ok, data } = await api(
-      "/api/world?t=" + Date.now() + "&id=" + encodeURIComponent(state.id)
+      "/api/world?t=" +
+        Date.now() +
+        "&id=" +
+        encodeURIComponent(state.id) +
+        "&map=" +
+        encodeURIComponent(state.mapId || "")
     );
 
-    if (ok) applyWorld(data);
+    if (ok) {
+      // Server qaysi xaritani berganini aytadi — yopiq xarita
+      // so'ralgan bo'lsa u o'zinikini qaytaradi
+      if (data.mapId && data.mapId !== state.mapId) {
+        state.mapId = data.mapId;
+        saveStored("zonexMap", data.mapId);
+      }
+
+      applyWorld(data);
+    }
   } catch {
     // Internet uzildi — xaritadagi hech narsa o'chirilmaydi
   }
@@ -1994,6 +2088,9 @@ async function pushTerritory(entry) {
     entry.sent = true;
 
     savePending();
+
+    // XP, daraja, yangi xarita va himoya xabarlari (hub.js)
+    if (window.ZONEX_HUB) window.ZONEX_HUB.onTerritory(data);
 
     return { ok: true, data };
   }
@@ -4109,6 +4206,7 @@ function enterGame(data) {
   ensureLocation();
 
   if (window.ZONEX_GAME) window.ZONEX_GAME.start();
+  if (window.ZONEX_HUB) window.ZONEX_HUB.start();
 }
 
 // ------------------------------------------------------------
@@ -4399,6 +4497,7 @@ async function logout() {
   const token = state.token;
 
   if (window.ZONEX_GAME) window.ZONEX_GAME.stop();
+  if (window.ZONEX_HUB) window.ZONEX_HUB.stop();
 
   clearInterval(state.worldTimer);
   clearInterval(state.chatListTimer);
@@ -4796,6 +4895,7 @@ async function boot() {
   ensureLocation();
 
   if (window.ZONEX_GAME) window.ZONEX_GAME.start();
+  if (window.ZONEX_HUB) window.ZONEX_HUB.start();
 }
 
 if (document.readyState === "loading") {

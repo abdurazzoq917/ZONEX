@@ -1,6 +1,6 @@
 {
-  "versionCode": 6,
-  "versionName": "1.5",
+  "versionCode": 7,
+  "versionName": "1.6",
   "apkUrl": "/releases/zonex-latest.apk",
-  "notes": "Kunlik chelenj va point, naqishlar do'koni (epik/mifik/legendar), pointni pulga aylantirish, bildirishnomalar va QR kod qo'shildi."
+  "notes": "Uy belgilash, 5 ta xarita, XP va daraja, hudud himoyasi, klanlar, reytinglar, ZoneX Plus, hamkor reklamasi va admin panel qo'shildi."
 }

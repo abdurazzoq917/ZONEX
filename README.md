@@ -174,6 +174,12 @@ Upstash sahifasidagi **REST API** bo'limidan olingan qiymatlarni qo'ying.
 | `/api/challenges` | GET/POST | Kunlik chelenj va mukofot olish |
 | `/api/shop` | GET/POST | Naqishlar, pointni pulga aylantirish |
 | `/api/notify` | GET/POST | Bildirishnomalar |
+| `/api/profile` | GET/POST | Uy, xarita tanlash, maxfiylik, ramka |
+| `/api/rank` | GET | Reytinglar (qamrov × davr) |
+| `/api/clans` | GET/POST | Klanlar |
+| `/api/plus` | GET/POST | ZoneX Plus obunasi |
+| `/api/places` | GET/POST | Hamkor joylar (reklama) |
+| `/api/admin` | GET | Admin panel statistikasi |
 
 `/api/world` dan boshqa hammasi **token** talab qiladi — u
 `x-zonex-token` sarlavhasida yuriladi. Tokenni `/api/auth` beradi
@@ -191,6 +197,177 @@ Upstash sahifasidagi **REST API** bo'limidan olingan qiymatlarni qo'ying.
 | `verify` | `login`, `code` | Bir martalik `ticket` |
 | `reset` | `login`, `ticket`, `password` | Yangi parol + yangi `token` |
 | `change` | `id`, `token`, `oldPassword`, `password` | Yangi `token` |
+
+## Sahifalar
+
+| Manzil | Nima |
+| --- | --- |
+| `/` | **Yuklab olish sahifasi** — APK, tanishtiruv, QR kod |
+| `/app` | **O'yinning o'zi** (brauzer versiyasi) |
+| `/releases/zonex-latest.apk` | Android ilovasi |
+
+Android ilovasi ham `/app` dagi kodning aynan o'zini ishlatadi:
+`npm run build:native` `app.html` ni `public/index.html` qilib
+ko'chiradi.
+
+## Uy, daraja va xaritalar
+
+### Uy (majburiy)
+
+Ro'yxatdan o'tgach o'yinchi **uyini belgilaydi** — bu qadamni
+o'tkazib bo'lmaydi. Uydan shahar aniqlanadi (`api/_cities.js`)
+va shahar reytingi shunga qarab tuziladi. Uyni haftada bir
+marta o'zgartirish mumkin.
+
+Uyning ANIQ koordinatasi hech kimga ko'rsatilmaydi.
+
+### XP va daraja
+
+Daraja **faqat serverda** hisoblanadi (`api/_level.js`). Klient
+XP yoki darajani o'zgartira olmaydi — u faqat serverdan kelgan
+sonni ko'rsatadi.
+
+XP manbalari: yurish (kuniga 1 500 XP gacha), yangi maydon,
+begona hududni bosib olish, hududni kesish, kunlik chelenj va
+do'st qo'shish.
+
+Progressiya `PROGRESSION` obyektida turadi — balansni
+o'zgartirish uchun faqat shu joyni tahrirlash kifoya:
+
+| Daraja | Jami XP | Taxminan |
+| --- | --- | --- |
+| 5 | 6 700 | ~2 kun |
+| 10 | 46 800 | ~2 hafta |
+| 20 | 256 900 | ~2.5 oy |
+| 30 | 710 400 | ~7 oy |
+
+### Beshta xarita
+
+| Xarita | Daraja | Eng kichik hudud | Himoya |
+| --- | --- | --- | --- |
+| Beginner Zone | 1 | 40 m² | ×1.5 |
+| City Zone | 5 | 50 m² | ×1 |
+| Regional Zone | 10 | 120 m² | ×1 |
+| National Zone | 20 | 250 m² | ×0.8 |
+| World Zone | 30 | 400 m² | ×0.7 |
+
+Har bir xaritaning hududlari **alohida** saqlanadi: hudud
+yozuvida `mapId` turadi va hamma joyda shu bo'yicha
+filtrlanadi. Yopiq xaritaga API orqali ham kirib bo'lmaydi —
+server so'ralgan xaritani o'yinchining ro'yxati bilan
+solishtiradi.
+
+XP, daraja, do'stlar, point va akkaunt esa umumiy.
+
+## Hudud himoyasi va jang
+
+O'yin halqasi:
+
+```
+yurish → egallash → himoya → himoya tugadi → jang → yangi ega
+```
+
+Egallangan hudud ma'lum vaqtga himoyalanadi. Muddatni **faqat
+server** biladi (`territory.defendedUntil`), klient uni
+o'zgartira olmaydi.
+
+| Hudud darajasi | Himoya | Qancha yurish kerak |
+| --- | --- | --- |
+| L1 | 2 soat | — |
+| L2 | 4 soat | ~2 marta |
+| L3 | 8 soat | ~4 marta |
+| L4 | 12 soat | ~10 marta |
+| L5 | 24 soat | ~24 marta |
+
+Holatlar: `DEFENDED` → `VULNERABLE` → `CONTESTED` → `CAPTURED`.
+
+Himoyadagi yer hujumchining hududiga **qo'shilmaydi** ham —
+u o'yib tashlanadi. Aks holda himoyaning ma'nosi qolmasdi.
+
+**Yangi o'yinchi himoyasi:** ro'yxatdan o'tgandan keyin 3 kun
+davomida hududlarga umuman tegib bo'lmaydi.
+
+ZoneX Plus himoyani UZAYTIRMAYDI — bu ataylab shunday.
+
+## Anti-cheat
+
+Qoida: **serverga ishon, klientga emas**. Klient yuborgan hech
+bir son o'z holicha ishonchli emas.
+
+| Tekshiruv | Nimaga qaraydi |
+| --- | --- |
+| Sakrash (teleport) | Ikki nuqta orasi 400 m dan uzoq |
+| Soxta GPS | Yo'l juda "silliq" — dastur chizgan |
+| O'rtacha tezlik | 23 km/soat dan tez |
+| Eng yuqori tezlik | Transportda harakat |
+| Shahar almashishi | Oxirgi joydan 140 km/soat dan tez yetib kelish |
+| Vaqt | Hudud 8 sekunddan tez yopilgan |
+
+## Maxfiylik
+
+Uch rejim: `public` (hamma), `friends` (faqat do'stlar),
+`private` (hech kim).
+
+Rejimdan qat'i nazar **ANIQ GPS nuqta hech qachon berilmaydi**:
+u har doim 70–160 metrga surib ko'rsatiladi. Siljish o'yinchi
+ID'sidan hisoblanadi va o'zgarmaydi — aks holda ko'p o'lchovni
+o'rtalab haqiqiy nuqtani topish mumkin bo'lardi.
+
+## Reytinglar va klanlar
+
+Reyting **to'rtta qamrov × to'rtta davr**:
+
+- qamrov: global, shahar, do'stlar, klanlar
+- davr: kunlik, haftalik, oylik, umumiy
+
+Davr almashganda hisoblagich nolga tushadi (`api/_stats.js`),
+shuning uchun har hafta reyting yangilanadi.
+
+Shaharlar reytingi ham bor: Toshkent vs Samarqand vs Buxoro.
+
+Klan ochish uchun 3-daraja kerak, bitta klanda 30 tagacha a'zo.
+Klan XP'si a'zolarnikidan yig'iladi.
+
+## ZoneX Plus va reklama
+
+**ZoneX Plus — oyiga 19 990 so'm.** Beradi: reklamasiz
+foydalanish, maxsus profil ramkasi, qo'shimcha statistika,
+maxsus nishonlar, profilni bezash va qo'shimcha xarita
+ko'rinishlari.
+
+**Bermaydi (ataylab):** hudud himoyasi uzaymaydi, XP
+tezlashmaydi, yopiq xaritalar ochilmaydi. Ya'ni Plus — ko'rinish
+va qulaylik, o'yindagi kuch emas.
+
+Obunachida chapdagi `ZONEX` yozuvi `ZONEX PLUS` bo'ladi.
+
+**Hamkor joylar** — loyihani moliyalashtirishning ikkinchi yo'li.
+Biznes o'z joyini xaritaga qo'yadi, o'yinchi yonidan o'tganda
+taklifni ko'radi:
+
+```
+📍 Coffee X — ZoneX hamkori
+   Bugun kofega 20% chegirma
+```
+
+Plus obunachilariga reklama ko'rsatilmaydi.
+
+Reklama uchun murojaat: Telegram **@Abduumalikov_7**
+
+## Admin panel
+
+Menyudagi «Admin panel» (faqat adminda ko'rinadi):
+
+- nechta foydalanuvchi ro'yxatdan o'tgan va hozir nechtasi onlayn
+- bugun / hafta / oy ichida nechtasi qo'shilgan va nechtasi faol
+- uy belgilaganlar, email biriktirganlar, banlanganlar, Plus egalari
+- jami hudud, maydon, yurilgan yo'l, XP va point
+- xaritalar va shaharlar bo'yicha taqsimot
+- kutilayotgan to'lovlar — bir bosishda tasdiqlash yoki rad etish
+- hamkor joylar va ular necha marta ko'rsatilgani
+
+`.env` da `ADMIN_KEY` bo'lsa, panel birinchi ochilganda o'sha
+maxfiy so'zni so'raydi va uni qurilmada saqlaydi.
 
 ## Kunlik chelenj va point
 
@@ -286,6 +463,17 @@ ham ko'rinadi.
 | `styles.css` | Dizayn |
 | `client.js` | Xarita, GPS, tezlik nazorati, jonli odamlar |
 | `game.js` | Menyu, chelenj, do'kon, bildirishnoma, QR oynasi |
+| `hub.js` | Uy, xaritalar, daraja, reyting, klan, Plus, reklama, admin |
+| `app.html` | O'yin sahifasi (`/app`) |
+| `index.html` | Yuklab olish sahifasi (`/`) |
+| `api/_level.js` | XP va daraja (progressiya shu yerda sozlanadi) |
+| `api/_maps.js` | Beshta xarita va ular qaysi darajada ochilishi |
+| `api/_defense.js` | Hudud darajasi va himoya muddati |
+| `api/_plus.js` | ZoneX Plus obunasi, ramkalar, xarita ko'rinishlari |
+| `api/_places.js` | Hamkor joylar (reklama) |
+| `api/_stats.js` | Kunlik / haftalik / oylik hisoblagichlar |
+| `api/_cities.js` | Koordinatadan shaharni aniqlash |
+| `api/_clan.js` | Klan modeli |
 | `qr.js` | QR kod yasovchi (oflayn ishlaydi, kutubxonasiz) |
 | `api/_daily.js` | Kunlik chelenj: vazifalar, hisoblagich, mukofot |
 | `api/_skins.js` | Naqishlar katalogi va narxlari |

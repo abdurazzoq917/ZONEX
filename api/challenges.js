@@ -22,7 +22,9 @@ const {
   isBanned,
   banInfo,
   daily,
-  notify
+  notify,
+  level,
+  stats
 } = require("./_store");
 
 const { guard } = require("./_auth");
@@ -119,11 +121,27 @@ async function handler(req, res) {
 
     player.earned = Math.max(0, Number(player.earned) || 0) + result.reward;
 
+    // Chelenj XP ham beradi: mukofotning yarmi
+    const gainedXp = Math.round(result.reward / 2);
+
+    const xpResult = level.addXp(player, gainedXp, "challenge");
+
+    stats.bumpAll(player, { xp: gainedXp });
+
     notify.notify(player, {
       type: "reward",
       title: result.bonus ? "Kun bonusi olindi" : "Chelenj bajarildi",
-      body: "+" + result.reward + " point hisobingizga qo'shildi"
+      body:
+        "+" + result.reward + " point va +" + gainedXp + " XP qo'shildi"
     });
+
+    if (xpResult.levelUp) {
+      notify.notify(player, {
+        type: "level",
+        title: "Daraja " + player.level + "!",
+        body: "Tabriklaymiz — yangi darajaga chiqdingiz"
+      });
+    }
 
     await writePlayers([player]);
 
@@ -132,9 +150,10 @@ async function handler(req, res) {
       reward: result.reward,
       bonus: Boolean(result.bonus),
       points: player.points,
+      xp: { gained: gainedXp, levelUp: xpResult.levelUp, view: level.levelView(player) },
       daily: daily.todayView(player),
       player: publicPlayer(player, id),
-      message: "+" + result.reward + " point!",
+      message: "+" + result.reward + " point · +" + gainedXp + " XP",
       time: Date.now()
     });
   } catch (error) {

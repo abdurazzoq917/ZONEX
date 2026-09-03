@@ -21,11 +21,17 @@ module.exports = async function handler(req, res) {
     // (kelgan/yuborilgan do'stlik so'rovlari) ham qaytadi
     const params = new URLSearchParams(req.url.split("?")[1] || "");
 
-    const world = await getWorld(String(params.get("id") || "").trim());
+    // ?map= — qaysi xaritadagi hududlar kerak. Yopiq xarita
+    // so'ralsa server o'z xaritasini qaytaradi (getWorld).
+    const world = await getWorld(
+      String(params.get("id") || "").trim(),
+      String(params.get("map") || "").trim()
+    );
 
     return json(res, 200, {
       ok: true,
       players: world.players,
+      mapId: world.mapId,
       storage: world.storage,
       storageInfo: world.storageInfo,
 

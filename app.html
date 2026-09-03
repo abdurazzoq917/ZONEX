@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f7f7f9" />
+  <title>ZONEX — Yur. Egalla. Himoya qil.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="map" aria-label="Hududlar xaritasi"></div>
+
+  <header class="topbar">
+    <button class="brand" id="brandBtn" aria-label="Bosh sahifa"><span>ZONE</span><i>X</i></button>
+    <button class="live-pill" id="liveBtn" type="button">
+  <b></b>
+  <span>JONLI</span>
+</button>
+
+<div id="livePanel" class="live-panel">
+  <div class="live-header">
+    <strong>JONLI ODAMLAR</strong>
+    <button id="closeLive" type="button">×</button>
+  </div>
+
+  <div id="livePlayers">
+    <div class="live-empty">
+      Hozircha boshqa odamlar ko‘rinmadi
+    </div>
+  </div>
+</div>
+    <button class="search-btn" id="searchBtn" type="button" aria-label="Qidiruv">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    </button>
+    <button class="avatar" id="profileBtn" aria-label="Profil"><span id="avatarLetter">Z</span><em id="levelBadge">1</em></button>
+
+    <!-- Uchta nuqta — hamma yangi bo'lim shu yerda -->
+    <button class="menu-btn" id="menuBtn" type="button" aria-label="Menyu">
+      <i></i><i></i><i></i>
+      <em id="menuBadge" hidden>0</em>
+    </button>
+  </header>
+
+  <!-- ============================================================
+       UCHTA NUQTA MENYUSI
+       ============================================================ -->
+  <div class="menu-panel" id="menuPanel">
+    <button class="menu-row" type="button" data-menu="challenge">
+      <span class="menu-ico ch">◎</span>
+      <span class="menu-text"><strong>Kunlik chelenj</strong><small>Vazifani bajaring — point oling</small></span>
+      <em class="menu-count" id="challengeCount" hidden>0</em>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="shop">
+      <span class="menu-ico sh">✦</span>
+      <span class="menu-text"><strong>Do'kon — naqishlar</strong><small>Epik, mifik va legendar naqishlar</small></span>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="cash">
+      <span class="menu-ico cs">₴</span>
+      <span class="menu-text"><strong>Pointni pulga aylantirish</strong><small id="menuCashHint">To'plangan pointni yechib oling</small></span>
+    </button>
+
+    <button class="menu-row" type="button" data-hub="rank">
+      <span class="menu-ico rk">⚑</span>
+      <span class="menu-text"><strong>Reyting</strong><small>Global, shahar, do'stlar va klanlar</small></span>
+    </button>
+
+    <button class="menu-row" type="button" data-hub="clan">
+      <span class="menu-ico cl">⚔</span>
+      <span class="menu-text"><strong>Klanim</strong><small>Jamoa tuzing yoki qo'shiling</small></span>
+    </button>
+
+    <button class="menu-row" type="button" data-hub="map">
+      <span class="menu-ico mp">◈</span>
+      <span class="menu-text"><strong>Xarita tanlash</strong><small>Beginner → World, daraja bilan ochiladi</small></span>
+    </button>
+
+    <button class="menu-row plus-row" type="button" data-hub="plus">
+      <span class="menu-ico pl">✦</span>
+      <span class="menu-text"><strong>ZoneX Plus</strong><small>Oyiga 19 990 so'm — ramka, statistika, reklamasiz</small></span>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="notif">
+      <span class="menu-ico nt">◉</span>
+      <span class="menu-text"><strong>Bildirishnomalar</strong><small>Hudud, do'stlik va xabarlar</small></span>
+      <em class="menu-count" id="notifCount" hidden>0</em>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="friends">
+      <span class="menu-ico fr">☺</span>
+      <span class="menu-text"><strong>Do'stlashish</strong><small>So'rovlar va do'stlar ro'yxati</small></span>
+      <em class="menu-count" id="menuFriendCount" hidden>0</em>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="chat">
+      <span class="menu-ico ct">✉</span>
+      <span class="menu-text"><strong>Chat</strong><small>Do'stlar bilan yozishmalar</small></span>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="qr">
+      <span class="menu-ico qr">▦</span>
+      <span class="menu-text"><strong>QR kod</strong><small>Do'stlaringizga ZONEX'ni ulashing</small></span>
+    </button>
+
+    <div class="menu-split"></div>
+
+    <button class="menu-row" type="button" data-hub="privacy">
+      <span class="menu-ico pv">◐</span>
+      <span class="menu-text"><strong>Maxfiylik va uy</strong><small>Joylashuvingizni kim ko'radi</small></span>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="profile">
+      <span class="menu-ico pf">●</span>
+      <span class="menu-text"><strong>Profilim</strong><small>Rasm, parol, akkaunt</small></span>
+    </button>
+
+    <button class="menu-row" type="button" id="adContact">
+      <span class="menu-ico ad">▣</span>
+      <span class="menu-text"><strong>Reklama uchun murojaat</strong><small>Telegram — @Abduumalikov_7</small></span>
+    </button>
+
+    <button class="menu-row" type="button" data-hub="admin" hidden>
+      <span class="menu-ico am">⚙</span>
+      <span class="menu-text"><strong>Admin panel</strong><small>Foydalanuvchilar va to'lovlar</small></span>
+    </button>
+  </div>
+
+  <!-- Daraja chizig'i — tepadagi panel ostida -->
+  <div class="level-bar" id="levelBar" hidden></div>
+
+  <!-- Daraja oshdi / yangi xarita ochildi -->
+  <div class="level-up" id="levelUp"></div>
+
+  <!-- Hamkor taklifi (pastdan chiqadi) -->
+  <div class="offer-card" id="offerCard"></div>
+
+  <div id="searchPanel" class="search-panel">
+    <div class="search-head">
+      <input id="searchInput" type="search" placeholder="Username qidirish…"
+             autocapitalize="off" autocorrect="off" spellcheck="false" />
+      <button id="closeSearch" type="button" aria-label="Yopish">×</button>
+    </div>
+    <div id="searchResults"></div>
+  </div>
+
+  <div id="friendsPanel" class="friends-panel">
+    <div class="live-header">
+      <strong>DO'STLAR</strong>
+      <button id="closeFriends" type="button" aria-label="Yopish">×</button>
+    </div>
+    <div id="friendsBody"></div>
+  </div>
+
+  <input type="file" id="avatarInput" accept="image/*" hidden />
+
+  <section class="area-card glass">
+    <p>MENING HUDUDIM</p>
+    <div><strong id="totalArea">0</strong><span>m²</span></div>
+    <small><i></i><span id="areaStatus">Birinchi hududingizni egallang</span></small>
+  </section>
+
+  <button class="locate-btn glass" id="locateBtn" aria-label="Meni xaritada ko‘rsat">
+    <svg viewBox="0 0 24 24"><path d="M12 2v3m0 14v3M2 12h3m14 0h3M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
+  </button>
+
+  <button class="chat-btn" id="friendsBtn" type="button" aria-label="Do'stlar va xabarlar">
+    <svg viewBox="0 0 24 24"><path d="M20.5 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.4-4.3a7.5 7.5 0 1 1 15.1-3.7Z"/></svg>
+    <em id="friendsBadge" hidden>0</em>
+  </button>
+
+  <!-- Pastki CHAP: point va uni sarflash -->
+  <button class="points-btn" id="pointsBtn" type="button">
+    <span class="points-ico">✦</span>
+    <span class="points-text">
+      <b id="pointsValue">0</b>
+      <small>POINT</small>
+    </span>
+    <em class="points-new" id="pointsNew" hidden></em>
+  </button>
+
+  <!-- Pastki O'NG: QR kod -->
+  <button class="qr-btn" id="qrBtn" type="button">
+    <span class="qr-mini" id="qrMini" aria-hidden="true"></span>
+    <small>QR KOD</small>
+  </button>
+
+  <aside class="leaderboard glass" id="leaderboard">
+    <div class="leader-head"><span>REYTING</span><button id="closeBoard">×</button></div>
+    <div id="leaderRows"></div>
+  </aside>
+
+  <main class="bottom-panel glass">
+    <div class="drag"></div>
+    <div class="walking-info">
+      <div><span>MASOFA</span><strong id="distance">0.00 <small>km</small></strong></div>
+      <div><span>VAQT</span><strong id="timer">00:00</strong></div>
+      <div><span>TEZLIK</span><strong id="speed">0.0 <small>km/soat</small></strong></div>
+    </div>
+    <div class="action-row">
+      <button class="rank-btn" id="rankBtn" aria-label="Reyting">
+        <svg viewBox="0 0 24 24"><path d="M4 20v-7h4v7M10 20V4h4v16m2 0V9h4v11"/></svg>
+      </button>
+      <button class="start-btn" id="startBtn"><span class="play">▶</span><span class="stop">■</span><b id="startText">YURISHNI BOSHLASH</b></button>
+    </div>
+    <p class="hint" id="hint">Yo‘lingizni kesib o‘ting — o‘sha joy sizniki bo‘ladi</p>
+  </main>
+
+  <!-- ============================================================
+       AKKAUNT: KIRISH / RO'YXAT / PAROLNI TIKLASH
+
+       Bitta oyna, beshta ekran. Qaysi biri ko'rinishi
+       data-screen atributiga bog'liq (client.js: showAuth).
+       ============================================================ -->
+  <div class="modal" id="authModal">
+    <div class="modal-card auth" id="authCard" data-screen="login">
+
+      <div class="logo-mark"><span>ZONE</span><i>X</i></div>
+
+      <!-- ---------- KIRISH ---------- -->
+      <section class="auth-screen" data-pane="login">
+        <div class="mini-map"><div class="route-shape"></div><b class="pin p1"></b><b class="pin p2"></b></div>
+        <p class="eyebrow">SHAHAR SENIKI</p>
+        <h1>Yur. Egalla.<br><em>Himoya qil.</em></h1>
+        <p class="intro">Akkauntingizga kiring — hududlaringiz va do‘stlaringiz istalgan telefonda o‘zingiz bilan.</p>
+
+        <label for="loginName">USERNAME YOKI EMAIL</label>
+        <input id="loginName" autocapitalize="off" autocorrect="off" spellcheck="false"
+               autocomplete="username" placeholder="jasur_07" />
+
+        <label for="loginPass" class="mt">PAROL</label>
+        <div class="pass-wrap">
+          <input id="loginPass" type="password" autocomplete="current-password" placeholder="••••••••" />
+          <button class="eye" type="button" data-eye="loginPass" aria-label="Parolni ko‘rsatish">👁</button>
+        </div>
+
+        <p class="error" id="loginError"></p>
+
+        <button class="primary" id="loginBtn">KIRISH <span>→</span></button>
+        <button class="text-btn" type="button" id="toForgot">Parolni unutdingizmi?</button>
+
+        <p class="auth-swap">Akkauntingiz yo‘qmi?
+          <button type="button" id="toRegister">Ro‘yxatdan o‘ting</button>
+        </p>
+      </section>
+
+      <!-- ---------- RO'YXATDAN O'TISH ---------- -->
+      <section class="auth-screen" data-pane="register">
+        <p class="eyebrow">YANGI AKKAUNT</p>
+        <h1>Bir daqiqada<br><em>boshlaymiz</em></h1>
+
+        <label for="regName">USERNAME</label>
+        <input id="regName" maxlength="16" autocapitalize="off" autocorrect="off" spellcheck="false"
+               autocomplete="username" placeholder="jasur_07" />
+        <p class="hint-small">Faqat harf, raqam, «_» va «.» — bitta usernameni ikki kishi ola olmaydi</p>
+
+        <label for="regEmail" class="mt">EMAIL</label>
+        <input id="regEmail" type="email" inputmode="email" autocapitalize="off" autocorrect="off"
+               spellcheck="false" autocomplete="email" placeholder="ism@gmail.com" />
+        <p class="hint-small">Parolni unutsangiz, tiklash kodi shu manzilga keladi</p>
+
+        <label for="regPass" class="mt">PAROL</label>
+        <div class="pass-wrap">
+          <input id="regPass" type="password" autocomplete="new-password" placeholder="kamida 6 ta belgi" />
+          <button class="eye" type="button" data-eye="regPass" aria-label="Parolni ko‘rsatish">👁</button>
+        </div>
+
+        <!-- Parol kuchi: uchta bo'lak to'ladi -->
+        <div class="pass-meter" id="regMeter" data-level=""><i></i><i></i><i></i></div>
+        <p class="pass-msg" id="regPassMsg"></p>
+
+        <p class="error" id="regError"></p>
+
+        <button class="primary" id="registerBtn">RO‘YXATDAN O‘TISH <span>→</span></button>
+
+        <p class="auth-swap">Akkauntingiz bormi?
+          <button type="button" id="toLogin">Kiring</button>
+        </p>
+        <small class="terms">Davom etib, xavfsizlik qoidalariga rozilik bildirasiz</small>
+      </section>
+
+      <!-- ---------- PAROLNI TIKLASH: 1 — kod so'rash ---------- -->
+      <section class="auth-screen" data-pane="forgot">
+        <p class="eyebrow">1-QADAM</p>
+        <h1>Parolni<br><em>tiklaymiz</em></h1>
+        <p class="intro">Akkauntingizni ayting — emailingizga 6 xonali kod yuboramiz.</p>
+
+        <label for="forgotName">USERNAME YOKI EMAIL</label>
+        <input id="forgotName" autocapitalize="off" autocorrect="off" spellcheck="false"
+               autocomplete="username" placeholder="jasur_07" />
+
+        <p class="error" id="forgotError"></p>
+
+        <button class="primary" id="forgotBtn">KOD YUBORISH <span>→</span></button>
+        <button class="text-btn" type="button" data-back="login">← Kirish oynasiga qaytish</button>
+      </section>
+
+      <!-- ---------- PAROLNI TIKLASH: 2 — kodni kiritish ---------- -->
+      <section class="auth-screen" data-pane="code">
+        <p class="eyebrow">2-QADAM</p>
+        <h1>Kodni<br><em>kiriting</em></h1>
+        <p class="intro">Kod <b id="codeEmail">emailingizga</b> yuborildi. Xat 1–2 daqiqada keladi — «Spam» papkasini ham tekshiring.</p>
+
+        <label for="codeInput">6 XONALI KOD</label>
+        <input id="codeInput" class="code-input" inputmode="numeric" maxlength="6"
+               autocomplete="one-time-code" placeholder="000000" />
+
+        <p class="error" id="codeError"></p>
+
+        <button class="primary" id="codeBtn">TASDIQLASH <span>→</span></button>
+        <button class="text-btn" type="button" id="resendBtn">Kod kelmadimi? Qayta yuborish</button>
+        <button class="text-btn" type="button" data-back="login">← Kirish oynasiga qaytish</button>
+      </section>
+
+      <!-- ---------- PAROLNI TIKLASH: 3 — yangi parol ---------- -->
+      <section class="auth-screen" data-pane="newpass">
+        <p class="eyebrow">3-QADAM</p>
+        <h1>Yangi<br><em>parol</em></h1>
+        <p class="intro">Yangi parol qo‘yilgach, barcha qurilmalardan chiqib ketasiz — bu akkauntingizni himoya qiladi.</p>
+
+        <label for="newPass">YANGI PAROL</label>
+        <div class="pass-wrap">
+          <input id="newPass" type="password" autocomplete="new-password" placeholder="kamida 6 ta belgi" />
+          <button class="eye" type="button" data-eye="newPass" aria-label="Parolni ko‘rsatish">👁</button>
+        </div>
+
+        <div class="pass-meter" id="newMeter" data-level=""><i></i><i></i><i></i></div>
+        <p class="pass-msg" id="newPassMsg"></p>
+
+        <p class="error" id="newError"></p>
+
+        <button class="primary" id="newPassBtn">SAQLASH VA KIRISH <span>→</span></button>
+        <button class="text-btn" type="button" data-back="login">← Kirish oynasiga qaytish</button>
+      </section>
+
+    </div>
+  </div>
+
+  <div class="modal" id="locationModal">
+    <div class="modal-card permission">
+      <div class="radar"><span></span><i></i></div>
+      <p class="eyebrow">KEYINGI QADAM</p>
+      <h2>Joylashuvingizni<br><em>yoqing</em></h2>
+      <p>Yurilgan yo‘lni aniq chizish va hududlarni egallash uchun joylashuv kerak.</p>
+      <div class="privacy"><b>✓</b><span><strong>Ma’lumotlaringiz xavfsiz</strong><small>Joylashuv faqat o‘yin davomida ishlatiladi</small></span></div>
+      <button class="primary" id="allowBtn">JOYLASHUVNI YOQISH <span>⌖</span></button>
+    </div>
+  </div>
+
+  <div class="modal" id="profileModal">
+    <div class="modal-card profile">
+      <button class="close-x" id="closeProfile" type="button" aria-label="Yopish">×</button>
+      <div id="profileBody"></div>
+    </div>
+  </div>
+
+  <!-- Parolni almashtirish — profil ichidan ochiladi -->
+  <div class="modal" id="passModal">
+    <div class="modal-card">
+      <button class="close-x" id="closePass" type="button" aria-label="Yopish">×</button>
+
+      <p class="eyebrow">XAVFSIZLIK</p>
+      <h2>Parolni<br><em>almashtirish</em></h2>
+
+      <label for="oldPass" class="mt">HOZIRGI PAROL</label>
+      <div class="pass-wrap">
+        <input id="oldPass" type="password" autocomplete="current-password" placeholder="••••••••" />
+        <button class="eye" type="button" data-eye="oldPass" aria-label="Parolni ko‘rsatish">👁</button>
+      </div>
+
+      <label for="changePass" class="mt">YANGI PAROL</label>
+      <div class="pass-wrap">
+        <input id="changePass" type="password" autocomplete="new-password" placeholder="kamida 6 ta belgi" />
+        <button class="eye" type="button" data-eye="changePass" aria-label="Parolni ko‘rsatish">👁</button>
+      </div>
+
+      <div class="pass-meter" id="changeMeter" data-level=""><i></i><i></i><i></i></div>
+      <p class="pass-msg" id="changePassMsg"></p>
+
+      <p class="error" id="changeError"></p>
+
+      <button class="primary" id="changeBtn">SAQLASH <span>→</span></button>
+      <small class="terms">Parol o‘zgargach, barcha qurilmalardan chiqib ketasiz</small>
+    </div>
+  </div>
+
+  <div class="modal" id="chatModal">
+    <div class="modal-card chat">
+      <div class="chat-top">
+        <button class="chat-back" id="closeChat" type="button" aria-label="Orqaga">‹</button>
+        <div id="chatHead" class="chat-head"></div>
+      </div>
+      <div id="chatBox" class="chat-box"></div>
+      <div class="chat-send">
+        <input id="chatInput" maxlength="500" placeholder="Xabar yozing…"
+               autocomplete="off" />
+        <button id="chatSend" type="button" aria-label="Yuborish">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       KUNLIK CHELENJ
+       ============================================================ -->
+  <div class="modal" id="challengeModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closeChallenge" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>KUNLIK CHELENJ</strong>
+          <small id="challengeReset">Bugungi vazifalar</small>
+        </div>
+        <span class="sheet-points"><b id="challengePoints">0</b> P</span>
+      </div>
+
+      <div class="sheet-body" id="challengeBody"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       DO'KON: NAQISHLAR VA POINTNI PULGA AYLANTIRISH
+       ============================================================ -->
+  <div class="modal" id="shopModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closeShop" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>DO'KON</strong>
+          <small>Naqishlar hududingiz ustida turadi</small>
+        </div>
+        <span class="sheet-points"><b id="shopPoints">0</b> P</span>
+      </div>
+
+      <div class="sheet-tabs">
+        <button type="button" class="on" data-tab="skins">NAQISHLAR</button>
+        <button type="button" data-tab="cash">PULGA AYLANTIRISH</button>
+      </div>
+
+      <div class="sheet-body" id="shopBody"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       BILDIRISHNOMALAR
+       ============================================================ -->
+  <div class="modal" id="notifModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closeNotif" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>BILDIRISHNOMALAR</strong>
+          <small>Hudud, do'stlik va xabarlar</small>
+        </div>
+        <button class="sheet-act" id="readAllNotif" type="button">HAMMASI O'QILDI</button>
+      </div>
+
+      <div class="sheet-body" id="notifBody"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       QR KOD — butun ekranga chiqadi
+       ============================================================ -->
+  <div class="modal qr-modal" id="qrModal">
+    <div class="qr-full">
+      <button class="qr-close" id="closeQr" type="button" aria-label="Yopish">×</button>
+
+      <div class="logo-mark"><span>ZONE</span><i>X</i></div>
+      <p class="eyebrow">TELEFONGA O‘QITING</p>
+      <h2>ZONEX'ni<br><em>ulashing</em></h2>
+
+      <div class="qr-box" id="qrBox"></div>
+
+      <p class="qr-link" id="qrLink">zonex-project.vercel.app</p>
+
+      <div class="qr-actions">
+        <button class="primary" id="copyQr" type="button">HAVOLADAN NUSXA OLISH <span>⧉</span></button>
+        <button class="text-btn" id="openQr" type="button">Saytni ochish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       UY BELGILASH — MAJBURIY QADAM
+       ============================================================ -->
+  <div class="modal" id="homeModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closeHome" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>UYINGIZNI BELGILANG</strong>
+          <small>Shahar reytingi shu joyga qarab tuziladi</small>
+        </div>
+      </div>
+
+      <div class="home-pick">
+        <div id="homeMap"></div>
+        <div class="home-cross">⊕</div>
+      </div>
+
+      <div class="sheet-body">
+        <p class="sheet-note">Xaritani suring — o'rtadagi nishon turgan joy
+          uyingiz bo'ladi. Aniq nuqta HECH KIMGA ko'rsatilmaydi.</p>
+
+        <p class="cash-out" id="homeCoords"></p>
+
+        <label for="homeName">NOMI (ixtiyoriy)</label>
+        <input id="homeName" maxlength="40" placeholder="Chilonzor, 12-kvartal" />
+
+        <button class="primary" id="saveHome" type="button">UYNI SAQLASH <span>→</span></button>
+        <button class="text-btn" id="useMyLocation" type="button">Hozirgi joyimni olish</button>
+
+        <small class="terms">Uyni haftada bir marta o'zgartirish mumkin</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       XARITA TANLASH
+       ============================================================ -->
+  <div class="modal" id="mapModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closeMap" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>XARITALAR</strong>
+          <small>Daraja bilan ochiladi — pul bilan emas</small>
+        </div>
+      </div>
+      <div class="sheet-body" id="mapBody"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       REYTING
+       ============================================================ -->
+  <div class="modal" id="rankModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closeRank" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>REYTING</strong>
+          <small>Har hafta yangilanadi</small>
+        </div>
+      </div>
+
+      <div class="sheet-tabs">
+        <button type="button" class="on" data-scope="global">GLOBAL</button>
+        <button type="button" data-scope="city">SHAHAR</button>
+        <button type="button" data-scope="friends">DO'STLAR</button>
+        <button type="button" data-scope="clans">KLANLAR</button>
+      </div>
+
+      <div class="sheet-tabs small">
+        <button type="button" data-period="daily">Kunlik</button>
+        <button type="button" class="on" data-period="weekly">Haftalik</button>
+        <button type="button" data-period="monthly">Oylik</button>
+        <button type="button" data-period="total">Umumiy</button>
+      </div>
+
+      <div class="sheet-body" id="rankBody"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       KLANLAR
+       ============================================================ -->
+  <div class="modal" id="clanModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closeClan" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>KLANLAR</strong>
+          <small>Jamoa bo'lib o'ynang</small>
+        </div>
+      </div>
+      <div class="sheet-body" id="clanBody"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       ZONEX PLUS
+       ============================================================ -->
+  <div class="modal" id="plusModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closePlus" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>ZONEX PLUS</strong>
+          <small>Loyihani qo'llab-quvvatlang</small>
+        </div>
+      </div>
+      <div class="sheet-body" id="plusBody"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       MAXFIYLIK VA UY
+       ============================================================ -->
+  <div class="modal" id="privacyModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closePrivacy" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>MAXFIYLIK</strong>
+          <small>Joylashuvingizni kim ko'radi</small>
+        </div>
+      </div>
+      <div class="sheet-body" id="privacyBody"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       ADMIN PANEL
+       ============================================================ -->
+  <div class="modal" id="adminModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closeAdmin" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>ADMIN PANEL</strong>
+          <small>Foydalanuvchilar va to'lovlar</small>
+        </div>
+      </div>
+      <div class="sheet-body" id="adminBody"></div>
+    </div>
+  </div>
+
+  <div class="speed-warn" id="speedWarn"></div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="client.js"></script>
+  <script src="qr.js"></script>
+  <script src="game.js"></script>
+  <script src="hub.js"></script>
+</body>
+</html>

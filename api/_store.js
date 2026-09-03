@@ -30,6 +30,14 @@ const auth = require("./_auth");
 const daily = require("./_daily");
 const notify = require("./_notify");
 const skins = require("./_skins");
+const level = require("./_level");
+const maps = require("./_maps");
+const defense = require("./_defense");
+const plus = require("./_plus");
+const stats = require("./_stats");
+const cities = require("./_cities");
+const places = require("./_places");
+const clans = require("./_clan");
 
 const REDIS_URL =
   process.env.KV_REST_API_URL ||
@@ -67,6 +75,12 @@ const LIVE_KEY = (id) => "zonex:live:" + id;
 const AVATAR_KEY = (id) => "zonex:avatar:" + id;
 
 const LOCK_KEY = (name) => "zonex:lock:" + name;
+
+// Klanlar va hamkor joylar — o'yinchi yozuvlaridan alohida.
+// Ular kam o'zgaradi va soni oz, shuning uchun bitta ro'yxat
+// sifatida saqlanadi.
+const CLANS_KEY = "zonex:clans";
+const PLACES_KEY = "zonex:places";
 
 const FILE_PATH = process.env.VERCEL
   ? path.join("/tmp", "zonex-world.json")
@@ -144,6 +158,19 @@ const ADMIN_USERNAME = String(
 const ADMIN_KEY = String(process.env.ADMIN_KEY || "");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// ============================================================
+// YANGI O'YINCHI HIMOYASI
+// ============================================================
+//
+// Ro'yxatdan o'tgandan keyin shuncha vaqt davomida hududlari
+// hech kim tomonidan bosib olinmaydi. Shunda yangi odam
+// birinchi kunidayoq veteranga yem bo'lmaydi.
+//
+// Bu himoya "beginner" xaritasida ham, boshqasida ham ishlaydi.
+// ============================================================
+
+const NEWBIE_MS = 3 * DAY_MS;
 
 // ============================================================
 // RANG — qurilma ID bo'yicha, har kimga har xil
@@ -618,6 +645,42 @@ function createPlayer(id, name) {
     orders: [],
     cashouts: [],
 
+    // ---- daraja, xarita, uy, obuna ----
+    //
+    // xp / level  — SERVER hisoblaydi (qarang: _level.js)
+    // mapId/maps  — qaysi xaritada o'ynayapti va qaysilari ochiq
+    // home        — o'yinchi belgilagan uy (majburiy)
+    // plus        — ZoneX Plus obunasi
+    // privacy     — joylashuvni kim ko'radi
+    // clanId      — qaysi klanda
+    // stats       — kunlik/haftalik/oylik natijalar (reyting uchun)
+    // newbieUntil — yangi o'yinchi himoyasi shu vaqtgacha
+    xp: 0,
+    level: 1,
+    mapId: "beginner",
+    maps: ["beginner"],
+    walkXp: null,
+
+    home: null,
+    city: "",
+
+    plus: {
+      until: 0,
+      since: 0,
+      months: 0,
+      frame: "",
+      theme: "default",
+      orders: []
+    },
+    privacy: "public",
+
+    clanId: "",
+    badges: [],
+    stats: null,
+    privacyAsked: false,
+
+    newbieUntil: now + NEWBIE_MS,
+
     createdAt: now,
     updatedAt: now
   };
@@ -671,8 +734,15 @@ function normalizeTerritory(territory, player) {
     ownerId: player.id,
     ownerName: player.name,
     color: player.color,
-    area: Math.round(area)
+    area: Math.round(area),
+
+    // Hudud qaysi xaritaga tegishli. Eski (bu maydonsiz)
+    // yozuvlar "beginner" da qoladi — ular yo'qolmaydi.
+    mapId: maps.mapOf(territory)
   };
+
+  // Daraja va himoya muddati (qarang: _defense.js)
+  defense.normalizeTerritoryDefense(out);
 
   if (holes.length) {
     out.holes = holes;
@@ -762,7 +832,95 @@ function normalizeGame(player) {
   player.orders = orderList(player.orders, "order");
   player.cashouts = orderList(player.cashouts, "cashout");
 
+  // ---- XP va daraja ----
+  //
+  // Daraja HAR DOIM XP dan qayta hisoblanadi. Shuning uchun
+  // bazadagi `level` qiymati buzilgan yoki qo'lda yozilgan
+  // bo'lsa ham hech narsa o'zgarmaydi.
+  const xp = Number(player.xp);
+
+  player.xp = Number.isFinite(xp) && xp > 0 ? Math.floor(xp) : 0;
+  player.level = level.levelOf(player.xp);
+
+  level.normalizeWalkXp(player, "");
+
+  // ---- xaritalar ----
+  //
+  // Ochilgan xaritalar ham darajadan hisoblanadi — yopiq
+  // xaritaga API orqali "kirib olish" ishlamaydi.
+  maps.normalizeMaps(player, player.level);
+
+  // ---- uy ----
+  player.home = cleanHome(player.home);
+
+  // ---- maxfiylik ----
+  const privacy = String(player.privacy || "");
+
+  player.privacy = ["public", "friends", "private"].includes(privacy)
+    ? privacy
+    : "public";
+
+  // ---- shahar (reyting uchun) ----
+  player.city = cities.cityOf(player) || String(player.city || "");
+
+  // ---- obuna ----
+  plus.normalizePlus(player);
+
+  // ---- klan ----
+  player.clanId = String(player.clanId || "").slice(0, 40);
+
+  // ---- nishonlar ----
+  player.badges = Array.from(
+    new Set(
+      (Array.isArray(player.badges) ? player.badges : [])
+        .map((badge) => String(badge || "").slice(0, 24))
+        .filter(Boolean)
+    )
+  ).slice(0, 40);
+
+  // ---- davriy statistika ----
+  stats.normalizeStats(player, Date.now());
+
+  // ---- yangi o'yinchi himoyasi ----
+  const newbie = Number(player.newbieUntil);
+
+  // 0 — "himoya tugagan" degani va u SHU HOLICHA qoladi.
+  // Faqat maydon umuman yo'q bo'lsa (eski yozuv) yangidan
+  // hisoblanadi.
+  player.newbieUntil = Number.isFinite(newbie)
+    ? Math.max(0, newbie)
+    : (Number(player.createdAt) || Date.now()) + NEWBIE_MS;
+
   return player;
+}
+
+// ------------------------------------------------------------
+// UY
+// ------------------------------------------------------------
+//
+// O'yinchi o'z uyini belgilaydi — bu MAJBURIY qadam. Uy
+// shahridan reyting uchun shahar aniqlanadi va xaritada
+// boshlang'ich nuqta bo'lib turadi.
+//
+// Uyning ANIQ koordinatasi hech qachon boshqalarga
+// ko'rsatilmaydi (qarang: publicPlayer).
+// ------------------------------------------------------------
+
+function cleanHome(raw) {
+  if (!raw || typeof raw !== "object") return null;
+
+  const lat = Number(raw.lat);
+  const lng = Number(raw.lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+
+  return {
+    lat,
+    lng,
+    name: String(raw.name || "").replace(/\s+/g, " ").trim().slice(0, 40),
+    at: Number(raw.at) || Date.now()
+  };
 }
 
 function normalizePlayer(player, id) {
@@ -875,34 +1033,125 @@ function normalizePlayer(player, id) {
   return player;
 }
 
+// Rasm ma'lumoti juda katta — har 3 sekundda hammaga
+// yuborilmaydi. Uning o'rniga faqat `avatarAt` (versiya)
+// beriladi, rasmni klient /api/avatar dan bir marta oladi.
+
+// ------------------------------------------------------------
+// JOYLASHUVNI XIRALASHTIRISH
+// ------------------------------------------------------------
+//
+// Boshqa o'yinchiga o'yinchining ANIQ GPS nuqtasi hech qachon
+// berilmaydi — u har doim bir necha o'n metrga surib
+// ko'rsatiladi.
+//
+// Siljish o'yinchi ID'sidan hisoblanadi va O'ZGARMAYDI. Agar u
+// har safar boshqacha bo'lganda, ko'p o'lchovni o'rtalab olib
+// haqiqiy nuqtani topish mumkin bo'lardi.
+// ------------------------------------------------------------
+
+function fuzzLocation(location, meters) {
+  if (!location) return null;
+
+  const hash = hashId(String(location.seed || ""));
+
+  const angle = ((hash % 3600) / 10) * (Math.PI / 180);
+
+  // 0.45R .. 1.0R oralig'ida siljitamiz
+  const distance = meters * (0.45 + ((hash >> 11) % 56) / 100);
+
+  const dLat = (distance * Math.cos(angle)) / 111320;
+
+  const cos = Math.cos((Number(location.lat) * Math.PI) / 180);
+
+  const dLng =
+    (distance * Math.sin(angle)) / (111320 * (Math.abs(cos) > 0.01 ? cos : 0.01));
+
+  return {
+    lat: Math.round((Number(location.lat) + dLat) * 1e5) / 1e5,
+    lng: Math.round((Number(location.lng) + dLng) * 1e5) / 1e5,
+    accuracy: Math.max(Number(location.accuracy) || 0, meters),
+    time: location.time,
+    updatedAt: location.updatedAt,
+
+    // Klient buni bilib turadi — "taxminiy joylashuv" deb
+    // ko'rsatishi mumkin
+    fuzzy: true
+  };
+}
+
+// Viewer shu o'yinchining joylashuvini ko'ra oladimi va
+// qanchalik aniq
+function locationFor(player, viewerId, isSelf) {
+  if (isSelf) return player.location;
+
+  if (!player.location) return null;
+
+  const isFriend =
+    viewerId && Array.isArray(player.friends) &&
+    player.friends.includes(String(viewerId));
+
+  if (player.privacy === "private") return null;
+
+  if (player.privacy === "friends" && !isFriend) return null;
+
+  const seeded = { ...player.location, seed: player.id };
+
+  // Do'stlar yaqinroq ko'radi, begonalar uzoqroq
+  return fuzzLocation(seeded, isFriend ? 70 : 160);
+}
+
 // ============================================================
 // OCHIQ (PUBLIC) KO'RINISH
 // ============================================================
 //
-// Rasm ma'lumoti juda katta — har 3 sekundda hammaga
-// yuborilmaydi. Uning o'rniga faqat `avatarAt` (versiya)
-// beriladi, rasmni klient /api/avatar dan bir marta oladi.
-//
-// So'rovlar ro'yxati faqat o'ziga ko'rinadi.
-//
 // MUHIM: bu yer OQ RO'YXAT — pastda sanalgan maydonlargina
 // tashqariga chiqadi. Parol (`pass`), sessiya tokenlari
-// (`sessions`), tiklash kodi (`reset`) va email manzilining
-// o'zi bu ro'yxatda YO'Q, shuning uchun ular hech qachon
-// javobga tushmaydi. Yangi maxfiy maydon qo'shsangiz —
+// (`sessions`), tiklash kodi (`reset`), email manzili va UY
+// koordinatasi bu ro'yxatda YO'Q, shuning uchun ular hech
+// qachon begonaga tushmaydi. Yangi maxfiy maydon qo'shsangiz —
 // bu ro'yxatga QO'SHMANG.
+//
+// options.mapId berilsa — hududlar faqat o'sha xaritadan
+// qaytadi (xaritalar bir-biriga aralashmasin).
 // ============================================================
 
-function publicPlayer(player, viewerId) {
-  const isSelf = viewerId && String(player.id) === String(viewerId);
+function publicPlayer(player, viewerId, options) {
+  const isSelf = Boolean(viewerId && String(player.id) === String(viewerId));
+
+  // Yangi yaratilgan (hali normalizePlayer'dan o'tmagan) yozuv
+  // ham bemalol chiqsin — obuna maydoni bo'sh bo'lishi mumkin.
+  plus.normalizePlus(player);
+
+  const opts = options || {};
+
+  const now = Date.now();
+
+  // Hududlar — faqat so'ralgan xaritadan
+  const list = opts.mapId
+    ? maps.territoriesOn(player, opts.mapId)
+    : player.territories;
+
+  const area = list.reduce((sum, t) => sum + (Number(t.area) || 0), 0);
+
+  const view = level.levelView(player);
 
   const out = {
     id: player.id,
     name: player.name,
     color: player.color,
-    location: player.location,
-    area: player.area,
-    territories: player.territories,
+
+    location: locationFor(player, viewerId, isSelf),
+
+    area,
+
+    // Hududlar himoya holati bilan birga ketadi — klient
+    // ustidagi soatni shundan chizadi
+    territories: list.map((territory) => ({
+      ...territory,
+      defense: defense.defenseView(territory, now)
+    })),
+
     totalDistance: player.totalDistance,
 
     avatarAt: player.avatarAt,
@@ -916,6 +1165,25 @@ function publicPlayer(player, viewerId) {
     // Qo'yilgan naqish — buni HAMMA ko'radi, chunki hudud
     // xaritada o'sha naqish bilan chiziladi
     skin: player.skin || "",
+
+    // Daraja va XP ochiq: reyting va profil uchun kerak
+    level: view.level,
+    xp: view.xp,
+    levelInto: view.into,
+    levelNeed: view.need,
+    levelPercent: view.percent,
+
+    // ZoneX Plus nishoni va ramkasi ham ochiq — u ko'rinish
+    plus: plus.isPlus(player),
+    frame: plus.isPlus(player) ? player.plus.frame : "",
+    badges: player.badges,
+
+    clanId: player.clanId || "",
+    city: player.city || "",
+
+    // Yangi o'yinchi himoyasi — hujum qilib bo'lmasligini
+    // klient oldindan aytib turishi uchun
+    newbie: Number(player.newbieUntil) > now,
 
     online: player.online,
     createdAt: player.createdAt,
@@ -936,6 +1204,24 @@ function publicPlayer(player, viewerId) {
     out.notifUnread = notify.unreadCount(player);
     out.dailyReady = daily.readyCount(player);
 
+    // ---- xarita, uy, maxfiylik, obuna ----
+    out.mapId = player.mapId;
+    out.maps = player.maps;
+    out.home = player.home;
+    out.privacy = player.privacy;
+    out.privacyAsked = Boolean(player.privacyAsked);
+    out.newbieUntil = player.newbieUntil;
+
+    out.plusInfo = {
+      active: plus.isPlus(player),
+      until: player.plus.until,
+      daysLeft: plus.daysLeft(player),
+      frame: player.plus.frame,
+      theme: player.plus.theme
+    };
+
+    out.stats = player.stats;
+
     // O'ziga: email BOR-yo'qligi va yashirilgan ko'rinishi.
     // To'liq manzil qaytmaydi — u faqat bazada qoladi.
     out.hasEmail = Boolean(player.email);
@@ -951,14 +1237,14 @@ function publicPlayer(player, viewerId) {
   return out;
 }
 
-function publicList(players, viewerId) {
+function publicList(players, viewerId, options) {
   const list = Array.isArray(players) ? players : Object.values(players);
 
   const now = Date.now();
 
   return list
     .map((player) => {
-      const copy = publicPlayer(player, viewerId);
+      const copy = publicPlayer(player, viewerId, options);
 
       copy.online = Boolean(
         player.location &&
@@ -1490,11 +1776,83 @@ function storageReport() {
   return report;
 }
 
-async function getWorld(viewerId) {
+// ============================================================
+// KLANLAR VA HAMKOR JOYLAR
+// ============================================================
+//
+// Ikkalasi ham bitta ro'yxat bo'lib saqlanadi: Redis'da bitta
+// kalitda, faylda esa `clans` / `places` bo'limida.
+//
+// Ular kam o'zgaradi (klan ochish, joy qo'shish), shuning uchun
+// alohida indeks yoki kalit ajratish shart emas.
+// ============================================================
+
+async function readBlob(key, fileKey) {
+  if (USE_REDIS) {
+    const [raw] = await redisPipeline([["GET", key]]);
+
+    return parseRow(raw) || [];
+  }
+
+  const data = fileReadRaw();
+
+  return Array.isArray(data[fileKey]) ? data[fileKey] : [];
+}
+
+async function writeBlob(key, fileKey, list) {
+  if (USE_REDIS) {
+    await redisPipeline([["SET", key, JSON.stringify(list)]]);
+    return;
+  }
+
+  const data = fileReadRaw();
+
+  data[fileKey] = list;
+
+  fileWriteRaw(data);
+}
+
+async function readClans() {
+  return clans.normalizeClanList(await readBlob(CLANS_KEY, "clans"));
+}
+
+async function writeClans(list) {
+  await writeBlob(CLANS_KEY, "clans", clans.normalizeClanList(list));
+}
+
+async function readPlaces() {
+  return places.normalizeList(await readBlob(PLACES_KEY, "places"));
+}
+
+async function writePlaces(list) {
+  await writeBlob(PLACES_KEY, "places", places.normalizeList(list));
+}
+
+// Dunyoni QAYSI xaritadan olish kerak?
+//
+// Klient so'ragan xarita o'yinchi uchun ochiq bo'lmasa —
+// uning o'z xaritasi qaytadi. Ya'ni yopiq xaritani API orqali
+// "so'rab olish" ishlamaydi.
+function mapForViewer(players, viewerId, wanted) {
+  const me = players[String(viewerId || "")];
+
+  if (!me) return maps.DEFAULT_MAP;
+
+  const want = String(wanted || "");
+
+  if (want && me.maps.includes(want)) return want;
+
+  return me.mapId || maps.DEFAULT_MAP;
+}
+
+async function getWorld(viewerId, wantedMap) {
   const players = await readPlayers();
 
+  const mapId = mapForViewer(players, viewerId, wantedMap);
+
   return {
-    players: publicList(players, viewerId),
+    players: publicList(players, viewerId, { mapId }),
+    mapId,
     storage: USE_REDIS ? "kv" : "file",
     storageInfo: storageReport(),
     time: Date.now()
@@ -1714,6 +2072,26 @@ module.exports = {
   daily,
   notify,
   skins,
+
+  // daraja, xarita, himoya, obuna, statistika, shahar
+  level,
+  maps,
+  defense,
+  plus,
+  stats,
+  cities,
+  places,
+  clans,
+
+  // klanlar va hamkor joylar ombori
+  readClans,
+  writeClans,
+  readPlaces,
+  writePlaces,
+
+  cleanHome,
+  fuzzLocation,
+  NEWBIE_MS,
 
   // moderatsiya / do'stlik
   isAdminName,

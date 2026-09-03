@@ -1,8 +1,9 @@
 // scripts/build-native-www.js
 // ============================================================
 // Native (Capacitor/Android) ilova uchun "public/" papkasini
-// tayyorlaydi: index.html, styles.css, client.js shu yerga
-// nusxalanadi va index.html'ga native-config.js ulanadi.
+// tayyorlaydi: app.html (o'yin) public/index.html bo'lib
+// ko'chiriladi, yoniga styles.css, client.js, qr.js, game.js va
+// hub.js qo'yiladi, so'ng native-config.js ulanadi.
 //
 // api/, node_modules/ va h.k. native ilovaga KIRMAYDI — ular
 // serverda (Vercel'da) qoladi, ilova esa ZONEX_API_BASE orqali
@@ -20,7 +21,7 @@ const PUBLIC = path.join(ROOT, "public");
 fs.mkdirSync(PUBLIC, { recursive: true });
 
 // Native ilovaga ko'chiriladigan fayllar
-["styles.css", "client.js", "qr.js", "game.js"].forEach((name) => {
+["styles.css", "client.js", "qr.js", "game.js", "hub.js"].forEach((name) => {
   fs.copyFileSync(path.join(ROOT, name), path.join(PUBLIC, name));
 });
 
@@ -31,7 +32,12 @@ fs.copyFileSync(
   path.join(PUBLIC, "capacitor.js")
 );
 
-let html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
+// MUHIM: native ilova O'YINNING o'zini ochadi.
+//
+// Saytning ildizidagi index.html — bu yuklab olish sahifasi
+// (APK, brauzer versiyasi, tanishtiruv). O'yin esa app.html da
+// va u telefonda public/index.html bo'lib qo'yiladi.
+let html = fs.readFileSync(path.join(ROOT, "app.html"), "utf8");
 
 if (!html.includes("native-config.js")) {
   html = html.replace(

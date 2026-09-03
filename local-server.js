@@ -24,7 +24,13 @@ const routes = {
   "/api/messages": require("./api/messages"),
   "/api/challenges": require("./api/challenges"),
   "/api/shop": require("./api/shop"),
-  "/api/notify": require("./api/notify")
+  "/api/notify": require("./api/notify"),
+  "/api/profile": require("./api/profile"),
+  "/api/rank": require("./api/rank"),
+  "/api/clans": require("./api/clans"),
+  "/api/plus": require("./api/plus"),
+  "/api/places": require("./api/places"),
+  "/api/admin": require("./api/admin")
 };
 
 const types = {
@@ -44,6 +50,9 @@ function serveFile(req, res) {
   let requested = req.url.split("?")[0];
 
   if (requested === "/") requested = "/index.html";
+
+  // Vercel'dagi `cleanUrls` bilan bir xil bo'lsin: /app -> app.html
+  if (requested === "/app") requested = "/app.html";
 
   let clean;
 

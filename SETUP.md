@@ -243,11 +243,16 @@ istalgan joydan ishlaydi.
 ### Qayta yig'ish
 
 ```bash
-npm run build:native      # index.html, client.js, styles.css,
-                          # qr.js, game.js -> public/
+npm run build:native      # app.html -> public/index.html,
+                          # + client.js, styles.css, qr.js,
+                          #   game.js, hub.js
 npx cap sync android
 cd android && gradlew.bat assembleDebug
 ```
+
+MUHIM: native ilova **`app.html`** ni (o'yinni) ochadi. Saytning
+ildizidagi `index.html` esa — yuklab olish sahifasi, u ilovaga
+kirmaydi.
 
 APK shu yerda paydo bo'ladi:
 `android/app/build/outputs/apk/debug/app-debug.apk`
@@ -280,7 +285,26 @@ uchun Firebase (FCM) kerak bo'ladi, u alohida ish.
 
 ---
 
-## 6. Point va pulni boshqarish `[SIZ]`
+## 6. Sayt: yuklab olish sahifasi `[KOD]`
+
+Sayt ikki qismdan iborat:
+
+| Manzil | Nima |
+| --- | --- |
+| `/` | Yuklab olish sahifasi — APK tugmasi, QR kod, tanishtiruv |
+| `/app` | O'yinning o'zi (brauzer versiyasi) |
+| `/releases/zonex-latest.apk` | Android ilovasi |
+
+Yuklab olish sahifasi `version.json` ni o'qib, versiya raqami va
+APK hajmini o'zi ko'rsatadi — qo'lda yangilash shart emas.
+
+Ilovadagi QR kod ham shu sahifaga (`/`) olib boradi: odam QR ni
+skanerlaydi, sahifa ochiladi va APK'ni to'g'ridan-to'g'ri
+yuklab oladi.
+
+---
+
+## 7. Point va pulni boshqarish `[SIZ]`
 
 O'yinchilar pointni pulga aylantirish so'rovi yuboradi va legendar
 naqishlarni pulga buyurtma qiladi. Ikkalasi ham **avtomatik
@@ -314,7 +338,7 @@ yoki `price` qiymati.
 
 ---
 
-## 7. Play Market `[SIZ]`
+## 8. Play Market `[SIZ]`
 
 **Bepul emas.** Google Play Console dasturchi akkaunti bir martalik
 **$25** to'lovni talab qiladi. Ustiga yangi shaxsiy akkauntlar uchun
@@ -333,7 +357,7 @@ avto-yangilanish allaqachon bor.
 
 ---
 
-## 8. Keyingi bosqich: Postgres + PostGIS
+## 9. Keyingi bosqich: Postgres + PostGIS
 
 Bu hali **qilinmagan**, lekin o'ylab qo'yilgan yo'l.
 
