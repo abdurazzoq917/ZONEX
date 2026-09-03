@@ -57,4 +57,18 @@
       qaytarilmaydi).
     -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!--
+      Bildirishnomalar: hududingizni kimdir bosib olganda,
+      do'stlik so'rovi kelganda yoki yangi xabar kelganda ilova
+      telefon ekraniga xabar chiqaradi.
+
+      Android 13 (API 33) dan boshlab bu ruxsatni foydalanuvchi
+      tasdiqlashi kerak — buni @capacitor/local-notifications
+      o'zi so'raydi (client: game.js -> askNotifPermission).
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Telefon qayta yoqilganda rejalashtirilgan bildirishnoma yo'qolmasin -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 </manifest>

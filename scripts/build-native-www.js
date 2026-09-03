@@ -19,8 +19,10 @@ const PUBLIC = path.join(ROOT, "public");
 
 fs.mkdirSync(PUBLIC, { recursive: true });
 
-fs.copyFileSync(path.join(ROOT, "styles.css"), path.join(PUBLIC, "styles.css"));
-fs.copyFileSync(path.join(ROOT, "client.js"), path.join(PUBLIC, "client.js"));
+// Native ilovaga ko'chiriladigan fayllar
+["styles.css", "client.js", "qr.js", "game.js"].forEach((name) => {
+  fs.copyFileSync(path.join(ROOT, name), path.join(PUBLIC, name));
+});
 
 // window.Capacitor.registerPlugin ni yoqadi — bu bo'lmasa
 // BackgroundGeolocation plaginiga murojaat qilib bo'lmaydi.

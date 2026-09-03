@@ -1664,3 +1664,945 @@
 .account-box button.danger {
   color: var(--red);
 }
+
+/* `hidden` atributi har doim ishlasin — pastdagi
+   display: grid / flex qoidalari uni bosib ketmasin */
+[hidden] {
+  display: none !important;
+}
+
+/* ===============================
+   UCHTA NUQTA MENYUSI
+   =============================== */
+
+.menu-btn {
+  position: relative;
+  margin-left: 9px;
+  width: 39px;
+  height: 39px;
+  border: 0;
+  border-radius: 13px;
+  background: var(--surface);
+  box-shadow: 0 4px 14px rgba(18, 23, 39, .16);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.menu-btn i {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.menu-btn em,
+.points-btn em {
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 2px;
+  border: 2px solid #fff;
+  border-radius: 10px;
+  background: var(--red);
+  color: #fff;
+  font: 700 8px Manrope, system-ui, sans-serif;
+  font-style: normal;
+  display: grid;
+  place-items: center;
+}
+
+.menu-panel {
+  position: fixed;
+  z-index: 1200;
+  top: var(--panel-top);
+  right: 14px;
+  width: min(310px, calc(100vw - 28px));
+  max-height: 72vh;
+  overflow-y: auto;
+  padding: 8px;
+
+  background: var(--panel-solid);
+  backdrop-filter: blur(18px);
+  border-radius: 20px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .2);
+
+  opacity: 0;
+  transform: translateY(-12px) scale(.97);
+  transform-origin: top right;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.menu-panel.open {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.menu-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 10px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-row:active {
+  background: var(--hover-tint);
+}
+
+.menu-ico {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  color: #fff;
+  background: var(--blue);
+}
+
+.menu-ico.ch { background: #7c3aed }
+.menu-ico.sh { background: #db2777 }
+.menu-ico.cs { background: #059669 }
+.menu-ico.nt { background: var(--red) }
+.menu-ico.fr { background: #0891b2 }
+.menu-ico.ct { background: #2563eb }
+.menu-ico.qr { background: #111827 }
+.menu-ico.pf { background: #64748b }
+
+.menu-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.menu-text strong {
+  display: block;
+  font-size: 11px;
+}
+
+.menu-text small {
+  display: block;
+  margin-top: 2px;
+  font-size: 8px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-count {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--red);
+  color: #fff;
+  font: 700 9px Manrope, system-ui, sans-serif;
+  font-style: normal;
+  display: grid;
+  place-items: center;
+}
+
+.menu-split {
+  height: 1px;
+  margin: 6px 10px;
+  background: var(--divider);
+}
+
+/* ===============================
+   PASTKI CHAP: POINT
+   =============================== */
+
+.points-btn {
+  position: fixed;
+  z-index: 450;
+  left: 16px;
+  bottom: 191px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 13px 8px 9px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(18, 23, 39, .16);
+  cursor: pointer;
+}
+
+.points-ico {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: #fff;
+  background: linear-gradient(135deg, #7c3aed, #db2777);
+}
+
+.points-text {
+  display: block;
+  text-align: left;
+  line-height: 1.1;
+}
+
+.points-text b {
+  display: block;
+  font-size: 14px;
+  letter-spacing: -.5px;
+}
+
+.points-text small {
+  display: block;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 1.1px;
+  color: var(--muted);
+}
+
+.points-new {
+  width: 10px;
+  height: 10px;
+  min-width: 10px;
+  padding: 0;
+  right: -3px;
+  top: -3px;
+}
+
+/* ===============================
+   PASTKI O'NG: QR KOD
+   =============================== */
+
+.qr-btn {
+  position: fixed;
+  z-index: 450;
+  right: 16px;
+  bottom: 191px;
+  width: 56px;
+  padding: 6px 6px 5px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(18, 23, 39, .16);
+  cursor: pointer;
+  text-align: center;
+}
+
+.qr-mini {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.qr-mini svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.qr-btn small {
+  display: block;
+  margin-top: 3px;
+  font-size: 6.5px;
+  font-weight: 900;
+  letter-spacing: .8px;
+  color: var(--muted);
+}
+
+/* Katta ekranda pastdagi panel o'rtada turadi —
+   tugmalar unga yopishib qolmasin */
+@media (min-width: 700px) {
+  .points-btn { left: calc(50% - 330px) }
+  .qr-btn { right: calc(50% - 270px) }
+}
+
+/* ===============================
+   QR KOD — BUTUN EKRAN
+   =============================== */
+
+.qr-modal {
+  padding: 0;
+  background: rgba(8, 11, 22, .82);
+}
+
+.qr-full {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 520px;
+  margin: auto;
+  padding: max(28px, env(safe-area-inset-top)) 24px
+           calc(28px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  color: var(--ink);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.qr-close {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: 16px;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-size: 20px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.qr-box {
+  width: min(78vw, 300px);
+  aspect-ratio: 1;
+  margin: 22px 0 14px;
+  padding: 12px;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 16px 44px rgba(18, 23, 39, .18);
+}
+
+.qr-box svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.qr-link {
+  margin: 0 0 20px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--blue);
+  word-break: break-all;
+  text-align: center;
+}
+
+.qr-actions {
+  width: min(100%, 320px);
+}
+
+/* ===============================
+   KATTA OYNA (chelenj / do'kon / bildirishnoma)
+   =============================== */
+
+.modal-card.sheet {
+  width: min(100%, 460px);
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (min-width: 700px) {
+  .modal-card.sheet {
+    height: min(100%, 780px);
+    border-radius: 26px;
+  }
+}
+
+.sheet-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: max(14px, env(safe-area-inset-top)) 16px 13px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--surface);
+}
+
+.sheet-back {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--surface-2);
+  font-size: 22px;
+  line-height: 1;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.sheet-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.sheet-title strong {
+  display: block;
+  font-size: 12px;
+  letter-spacing: .6px;
+}
+
+.sheet-title small {
+  display: block;
+  margin-top: 2px;
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.sheet-points {
+  flex: none;
+  padding: 7px 11px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #7c3aed, #db2777);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.sheet-points b {
+  font-size: 12px;
+}
+
+.sheet-act {
+  flex: none;
+  border: 0;
+  background: none;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .5px;
+  color: var(--blue);
+  cursor: pointer;
+}
+
+.sheet-tabs {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px 0;
+}
+
+.sheet-tabs button {
+  flex: 1;
+  border: 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: .8px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.sheet-tabs button.on {
+  background: var(--ink);
+  color: #fff;
+}
+
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px calc(24px + env(safe-area-inset-bottom));
+}
+
+.sheet-body .empty,
+.sheet-note {
+  padding: 22px 12px;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.sheet-body label {
+  display: block;
+  margin: 14px 2px 7px;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+}
+
+.sheet-body input {
+  width: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: 13px;
+  padding: 14px 15px;
+  outline: 0;
+  font-size: 13px;
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.sheet-body input:focus {
+  border-color: var(--blue);
+}
+
+/* ===============================
+   KUNLIK CHELENJ
+   =============================== */
+
+.streak {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  background: linear-gradient(120deg, #fff7ed, #fef2f2);
+  border: 1px solid #fed7aa;
+}
+
+.streak-flame {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #f97316, #ef4444);
+  color: #fff;
+  font-size: 13px;
+}
+
+.streak strong {
+  display: block;
+  font-size: 11px;
+}
+
+.streak small {
+  display: block;
+  margin-top: 2px;
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.task {
+  padding: 13px 14px;
+  margin-bottom: 10px;
+  border-radius: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.task.ready {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.task.done {
+  opacity: .62;
+}
+
+.task.bonus {
+  background: #faf5ff;
+  border-color: #e9d5ff;
+}
+
+.task-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.task-head strong {
+  font-size: 11px;
+}
+
+.task-reward {
+  flex: none;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 900;
+  color: #7c3aed;
+}
+
+.task > small {
+  display: block;
+  margin-top: 3px;
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.task-bar {
+  height: 6px;
+  margin: 10px 0 8px;
+  border-radius: 4px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.task-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #7c3aed, #db2777);
+  transition: width .3s ease;
+}
+
+.task-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 8.5px;
+  color: var(--muted);
+}
+
+.task-foot .taken { color: #16a34a }
+.task-foot .wait { color: #9ca3af }
+
+.mini-claim {
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: .5px;
+  cursor: pointer;
+  box-shadow: 0 5px 14px rgba(22, 163, 74, .35);
+}
+
+/* ===============================
+   DO'KON — NAQISHLAR
+   =============================== */
+
+.shop-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 18px 2px 10px;
+}
+
+.shop-title b {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1.4px;
+}
+
+.shop-title span {
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.skin-off {
+  width: 100%;
+  border: 1px dashed var(--border);
+  border-radius: 13px;
+  padding: 11px;
+  background: none;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.skin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.skin-card {
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+}
+
+.skin-card.active {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(18, 70, 216, .1);
+}
+
+.skin-card.epic { border-top: 3px solid #3b82f6 }
+.skin-card.mythic { border-top: 3px solid #a855f7 }
+.skin-card.legend { border-top: 3px solid #f59e0b }
+
+.skin-art {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+}
+
+.skin-art .skin-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.skin-rarity {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, .55);
+  color: #fff;
+  font-style: normal;
+  font-size: 6.5px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.skin-info {
+  padding: 9px 10px 11px;
+}
+
+.skin-info strong {
+  display: block;
+  font-size: 10px;
+}
+
+.skin-info small {
+  display: block;
+  margin: 3px 0 9px;
+  font-size: 7.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  min-height: 22px;
+}
+
+.skin-btn {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  padding: 9px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: .5px;
+  cursor: pointer;
+}
+
+.skin-btn.buy {
+  background: linear-gradient(135deg, #7c3aed, #db2777);
+}
+
+.skin-btn.buy.money {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+}
+
+.skin-btn.on {
+  background: #16a34a;
+}
+
+.skin-btn.wait,
+.skin-btn[disabled] {
+  background: #e5e7eb;
+  color: var(--muted);
+  cursor: default;
+}
+
+.skin-btn[data-poor] {
+  opacity: .55;
+}
+
+/* ===============================
+   POINTNI PULGA AYLANTIRISH
+   =============================== */
+
+.cash-top {
+  padding: 20px 16px 16px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #111827, #4c1d95);
+  color: #fff;
+  text-align: center;
+}
+
+.cash-top .eyebrow {
+  color: #c4b5fd;
+  margin: 0 0 6px;
+}
+
+.cash-top h3 {
+  margin: 0;
+  font-size: 34px;
+  letter-spacing: -1.6px;
+}
+
+.cash-top h3 small {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: .7;
+}
+
+.cash-value {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: #6ee7b7;
+}
+
+.cash-note {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 8.5px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.cash-out {
+  margin: 7px 3px 0;
+  font-size: 10px;
+  font-weight: 800;
+  color: #059669;
+}
+
+.cash-methods {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.cash-methods button {
+  flex: 1;
+  border: 1.5px solid var(--border);
+  border-radius: 11px;
+  padding: 10px;
+  background: var(--surface-2);
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.cash-methods button.on {
+  border-color: var(--blue);
+  background: #eef2ff;
+  color: var(--blue);
+}
+
+.order-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  border-radius: 13px;
+  background: var(--surface-2);
+  font-size: 9.5px;
+}
+
+.order-row small {
+  display: block;
+  margin-top: 3px;
+  font-size: 7.5px;
+  color: var(--muted);
+}
+
+.order-row b {
+  flex: none;
+  font-size: 7.5px;
+  letter-spacing: .6px;
+}
+
+.order-row .ok { color: #16a34a }
+.order-row .no { color: var(--red) }
+.order-row .wait { color: #d97706 }
+
+/* ===============================
+   BILDIRISHNOMALAR
+   =============================== */
+
+.notif {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.notif.new {
+  background: #eef2ff;
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.notif-ico {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: #fff;
+  background: var(--muted);
+}
+
+.notif-ico.capture { background: var(--red) }
+.notif-ico.trim { background: #f59e0b }
+.notif-ico.friend_req,
+.notif-ico.friend_ok { background: #0891b2 }
+.notif-ico.chat { background: #2563eb }
+.notif-ico.reward,
+.notif-ico.shop { background: #7c3aed }
+
+.notif-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-text strong {
+  display: block;
+  font-size: 10px;
+}
+
+.notif-text small {
+  display: block;
+  margin-top: 3px;
+  font-size: 8.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.notif-time {
+  flex: none;
+  font-style: normal;
+  font-size: 7px;
+  color: #a0a2aa;
+}
+
+/* ===============================
+   DO'STLAR — MENYUDAN OCHILGANDA KATTA OYNA
+   =============================== */
+
+.friends-panel.as-window.open {
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  transform: none;
+  padding-top: max(10px, env(safe-area-inset-top));
+  z-index: 2100;
+}

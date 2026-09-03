@@ -21,7 +21,10 @@ const routes = {
   "/api/avatar": require("./api/avatar"),
   "/api/moderate": require("./api/moderate"),
   "/api/friends": require("./api/friends"),
-  "/api/messages": require("./api/messages")
+  "/api/messages": require("./api/messages"),
+  "/api/challenges": require("./api/challenges"),
+  "/api/shop": require("./api/shop"),
+  "/api/notify": require("./api/notify")
 };
 
 const types = {

@@ -26,6 +26,8 @@ const {
   isBanned,
   banInfo,
   geo,
+  daily,
+  notify,
   RULES
 } = require("./_store");
 
@@ -476,6 +478,80 @@ async function handler(req, res) {
     rebuildArea(player);
 
     player.updatedAt = Date.now();
+
+    // ---------------------------------------------------------
+    // 3) HAR KUNLIK CHELENJ HISOBLAGICHLARI
+    // ---------------------------------------------------------
+    //
+    // Faqat SHU aylanish hisobga olinadi — qo'shilib ketgan eski
+    // hududlarning masofasi ikkinchi marta sanalmaydi.
+    // ---------------------------------------------------------
+
+    const walkDistance = Math.round(
+      Number.isFinite(Number(body.distance)) && Number(body.distance) > 0
+        ? Number(body.distance)
+        : walked
+    );
+
+    daily.bump(player, "distance", walkDistance);
+    daily.bump(player, "area", area);
+    daily.bump(player, "zones", 1);
+    daily.bump(player, "capture", captured.length);
+
+    // ---------------------------------------------------------
+    // 4) HUDUDI QO'LDAN KETGANLARGA BILDIRISHNOMA
+    // ---------------------------------------------------------
+    //
+    // Bosib olingan hudud egasiga xabar boradi — ilova buni
+    // telefonda bildirishnoma qilib ko'rsatadi.
+    // ---------------------------------------------------------
+
+    const hit = new Map();
+
+    captured.forEach((lost) => {
+      const row = hit.get(String(lost.ownerId)) || { taken: 0, cut: 0, area: 0 };
+
+      row.taken += 1;
+      row.area += Number(lost.area) || 0;
+
+      hit.set(String(lost.ownerId), row);
+    });
+
+    trimmed.forEach((lost) => {
+      const row = hit.get(String(lost.ownerId)) || { taken: 0, cut: 0, area: 0 };
+
+      row.cut += 1;
+      row.area += Number(lost.area) || 0;
+
+      hit.set(String(lost.ownerId), row);
+    });
+
+    hit.forEach((row, ownerId) => {
+      const victim = changed.get(ownerId);
+
+      if (!victim) return;
+
+      notify.notify(victim, {
+        type: row.taken ? "capture" : "trim",
+        from: player.id,
+        fromName: player.name,
+
+        title: row.taken
+          ? "Hududingiz bosib olindi!"
+          : "Hududingizdan bo'lak kesildi",
+
+        body:
+          "@" +
+          player.name +
+          " " +
+          (row.taken
+            ? row.taken + " ta hududingizni oldi"
+            : row.cut + " ta hududingizni kesdi") +
+          " (" +
+          Math.round(row.area) +
+          " m²)"
+      });
+    });
 
     await writePlayers(Array.from(changed.values()));
 

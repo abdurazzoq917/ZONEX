@@ -243,7 +243,8 @@ istalgan joydan ishlaydi.
 ### Qayta yig'ish
 
 ```bash
-npm run build:native      # index.html, client.js, styles.css -> public/
+npm run build:native      # index.html, client.js, styles.css,
+                          # qr.js, game.js -> public/
 npx cap sync android
 cd android && gradlew.bat assembleDebug
 ```
@@ -261,9 +262,59 @@ ham** yangilash kerak:
 2. `version.json` → xuddi shu raqamlar
 3. `releases/zonex-latest.apk` → yangi fayl
 
+### Bildirishnomalar
+
+Ilova hududingiz bosib olinganini, do'stlik so'rovini va yangi
+xabarni telefon ekraniga chiqaradi. Buning uchun:
+
+- manifestda `POST_NOTIFICATIONS` ruxsati bor (allaqachon
+  qo'shilgan);
+- ilova birinchi ochilganda Android ruxsat so'raydi — foydalanuvchi
+  «Ruxsat berish» ni bosishi kerak;
+- bildirishnoma ilova **ochiq yoki fonda turganda** keladi
+  (har 20 soniyada server tekshiriladi). Yurish paytida ilova
+  fonda ishlab turadi, shuning uchun o'sha payt ham keladi.
+
+Ilova butunlay yopilgan bo'lsa bildirishnoma kelmaydi — buning
+uchun Firebase (FCM) kerak bo'ladi, u alohida ish.
+
 ---
 
-## 6. Play Market `[SIZ]`
+## 6. Point va pulni boshqarish `[SIZ]`
+
+O'yinchilar pointni pulga aylantirish so'rovi yuboradi va legendar
+naqishlarni pulga buyurtma qiladi. Ikkalasi ham **avtomatik
+bajarilmaydi** — siz tasdiqlaysiz.
+
+Kutayotgan so'rovlar ro'yxati:
+
+```bash
+curl -X POST https://SIZNING-SAYTINGIZ.vercel.app/api/shop   -H "Content-Type: application/json"   -H "x-zonex-token: <admin tokeni>"   -d '{"id":"<admin id>","action":"admin","do":"list","key":"<ADMIN_KEY>"}'
+```
+
+Tasdiqlash (yoki `"do":"reject"` — rad etish):
+
+```bash
+curl -X POST https://SIZNING-SAYTINGIZ.vercel.app/api/shop   -H "Content-Type: application/json"   -H "x-zonex-token: <admin tokeni>"   -d '{"id":"<admin id>","action":"admin","do":"approve",
+       "target":"<o'''yinchi id>","orderId":"<so'''rov id>",
+       "key":"<ADMIN_KEY>"}'
+```
+
+Nima bo'ladi:
+
+| Amal | Natija |
+| --- | --- |
+| To'lov so'rovi tasdiqlandi | Siz pulni o'zingiz o'tkazasiz, o'yinchiga xabar boradi |
+| To'lov so'rovi rad etildi | Pointlar o'yinchiga **qaytariladi** |
+| Naqish buyurtmasi tasdiqlandi | Legendar naqish ochiladi va o'zi qo'yiladi |
+
+Narxlarni o'zgartirish: `api/_skins.js` — `POINT_UZS` (1 point necha
+so'm), `CASHOUT_MIN` (eng kam point) va har bir naqishning `points`
+yoki `price` qiymati.
+
+---
+
+## 7. Play Market `[SIZ]`
 
 **Bepul emas.** Google Play Console dasturchi akkaunti bir martalik
 **$25** to'lovni talab qiladi. Ustiga yangi shaxsiy akkauntlar uchun
@@ -282,7 +333,7 @@ avto-yangilanish allaqachon bor.
 
 ---
 
-## 7. Keyingi bosqich: Postgres + PostGIS
+## 8. Keyingi bosqich: Postgres + PostGIS
 
 Bu hali **qilinmagan**, lekin o'ylab qo'yilgan yo'l.
 

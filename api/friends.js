@@ -19,7 +19,9 @@ const {
   writePlayers,
   isBanned,
   banInfo,
-  publicList
+  publicList,
+  daily,
+  notify
 } = require("./_store");
 
 const { guard } = require("./_auth");
@@ -36,6 +38,20 @@ function add(list, value) {
   clean.push(String(value));
 
   return clean;
+}
+
+// Ikkalasi do'st bo'ldi: chelenj hisoblagichi + bildirishnoma
+function becameFriends(me, other) {
+  daily.bump(me, "friends", 1);
+  daily.bump(other, "friends", 1);
+
+  notify.notify(other, {
+    type: "friend_ok",
+    from: me.id,
+    fromName: me.name,
+    title: "Yangi do'st",
+    body: "@" + me.name + " endi sizning do'stingiz"
+  });
 }
 
 async function handler(req, res) {
@@ -105,6 +121,8 @@ async function handler(req, res) {
           me.friends = add(me.friends, target);
           other.friends = add(other.friends, id);
 
+          becameFriends(me, other);
+
           await writePlayers([me, other]);
 
           return json(res, 200, {
@@ -118,6 +136,14 @@ async function handler(req, res) {
 
         me.outgoing = add(me.outgoing, target);
         other.incoming = add(other.incoming, id);
+
+        notify.notify(other, {
+          type: "friend_req",
+          from: me.id,
+          fromName: me.name,
+          title: "Do'stlik so'rovi",
+          body: "@" + me.name + " sizni do'stlikka chaqirdi"
+        });
 
         await writePlayers([me, other]);
 
@@ -144,6 +170,8 @@ async function handler(req, res) {
 
         me.friends = add(me.friends, target);
         other.friends = add(other.friends, id);
+
+        becameFriends(me, other);
 
         await writePlayers([me, other]);
 

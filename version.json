@@ -1,6 +1,6 @@
 {
-  "versionCode": 5,
-  "versionName": "1.4",
+  "versionCode": 6,
+  "versionName": "1.5",
   "apkUrl": "/releases/zonex-latest.apk",
-  "notes": "Ilova endi Vercel'dagi jonli serverga ulanadi — Wi-Fi shart emas, istalgan joydan o'ynash mumkin."
+  "notes": "Kunlik chelenj va point, naqishlar do'koni (epik/mifik/legendar), pointni pulga aylantirish, bildirishnomalar va QR kod qo'shildi."
 }

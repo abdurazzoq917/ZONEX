@@ -37,7 +37,63 @@
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     </button>
     <button class="avatar" id="profileBtn" aria-label="Profil"><span id="avatarLetter">Z</span><em id="levelBadge">1</em></button>
+
+    <!-- Uchta nuqta — hamma yangi bo'lim shu yerda -->
+    <button class="menu-btn" id="menuBtn" type="button" aria-label="Menyu">
+      <i></i><i></i><i></i>
+      <em id="menuBadge" hidden>0</em>
+    </button>
   </header>
+
+  <!-- ============================================================
+       UCHTA NUQTA MENYUSI
+       ============================================================ -->
+  <div class="menu-panel" id="menuPanel">
+    <button class="menu-row" type="button" data-menu="challenge">
+      <span class="menu-ico ch">◎</span>
+      <span class="menu-text"><strong>Kunlik chelenj</strong><small>Vazifani bajaring — point oling</small></span>
+      <em class="menu-count" id="challengeCount" hidden>0</em>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="shop">
+      <span class="menu-ico sh">✦</span>
+      <span class="menu-text"><strong>Do'kon — naqishlar</strong><small>Epik, mifik va legendar naqishlar</small></span>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="cash">
+      <span class="menu-ico cs">₴</span>
+      <span class="menu-text"><strong>Pointni pulga aylantirish</strong><small id="menuCashHint">To'plangan pointni yechib oling</small></span>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="notif">
+      <span class="menu-ico nt">◉</span>
+      <span class="menu-text"><strong>Bildirishnomalar</strong><small>Hudud, do'stlik va xabarlar</small></span>
+      <em class="menu-count" id="notifCount" hidden>0</em>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="friends">
+      <span class="menu-ico fr">☺</span>
+      <span class="menu-text"><strong>Do'stlashish</strong><small>So'rovlar va do'stlar ro'yxati</small></span>
+      <em class="menu-count" id="menuFriendCount" hidden>0</em>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="chat">
+      <span class="menu-ico ct">✉</span>
+      <span class="menu-text"><strong>Chat</strong><small>Do'stlar bilan yozishmalar</small></span>
+    </button>
+
+    <button class="menu-row" type="button" data-menu="qr">
+      <span class="menu-ico qr">▦</span>
+      <span class="menu-text"><strong>QR kod</strong><small>Do'stlaringizga ZONEX'ni ulashing</small></span>
+    </button>
+
+    <div class="menu-split"></div>
+
+    <button class="menu-row" type="button" data-menu="profile">
+      <span class="menu-ico pf">●</span>
+      <span class="menu-text"><strong>Profilim</strong><small>Rasm, parol, akkaunt</small></span>
+    </button>
+  </div>
 
   <div id="searchPanel" class="search-panel">
     <div class="search-head">
@@ -71,6 +127,22 @@
   <button class="chat-btn" id="friendsBtn" type="button" aria-label="Do'stlar va xabarlar">
     <svg viewBox="0 0 24 24"><path d="M20.5 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.4-4.3a7.5 7.5 0 1 1 15.1-3.7Z"/></svg>
     <em id="friendsBadge" hidden>0</em>
+  </button>
+
+  <!-- Pastki CHAP: point va uni sarflash -->
+  <button class="points-btn" id="pointsBtn" type="button">
+    <span class="points-ico">✦</span>
+    <span class="points-text">
+      <b id="pointsValue">0</b>
+      <small>POINT</small>
+    </span>
+    <em class="points-new" id="pointsNew" hidden></em>
+  </button>
+
+  <!-- Pastki O'NG: QR kod -->
+  <button class="qr-btn" id="qrBtn" type="button">
+    <span class="qr-mini" id="qrMini" aria-hidden="true"></span>
+    <small>QR KOD</small>
   </button>
 
   <aside class="leaderboard glass" id="leaderboard">
@@ -287,11 +359,94 @@
     </div>
   </div>
 
+  <!-- ============================================================
+       KUNLIK CHELENJ
+       ============================================================ -->
+  <div class="modal" id="challengeModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closeChallenge" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>KUNLIK CHELENJ</strong>
+          <small id="challengeReset">Bugungi vazifalar</small>
+        </div>
+        <span class="sheet-points"><b id="challengePoints">0</b> P</span>
+      </div>
+
+      <div class="sheet-body" id="challengeBody"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       DO'KON: NAQISHLAR VA POINTNI PULGA AYLANTIRISH
+       ============================================================ -->
+  <div class="modal" id="shopModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closeShop" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>DO'KON</strong>
+          <small>Naqishlar hududingiz ustida turadi</small>
+        </div>
+        <span class="sheet-points"><b id="shopPoints">0</b> P</span>
+      </div>
+
+      <div class="sheet-tabs">
+        <button type="button" class="on" data-tab="skins">NAQISHLAR</button>
+        <button type="button" data-tab="cash">PULGA AYLANTIRISH</button>
+      </div>
+
+      <div class="sheet-body" id="shopBody"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       BILDIRISHNOMALAR
+       ============================================================ -->
+  <div class="modal" id="notifModal">
+    <div class="modal-card sheet">
+      <div class="sheet-top">
+        <button class="sheet-back" id="closeNotif" type="button" aria-label="Yopish">‹</button>
+        <div class="sheet-title">
+          <strong>BILDIRISHNOMALAR</strong>
+          <small>Hudud, do'stlik va xabarlar</small>
+        </div>
+        <button class="sheet-act" id="readAllNotif" type="button">HAMMASI O'QILDI</button>
+      </div>
+
+      <div class="sheet-body" id="notifBody"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       QR KOD — butun ekranga chiqadi
+       ============================================================ -->
+  <div class="modal qr-modal" id="qrModal">
+    <div class="qr-full">
+      <button class="qr-close" id="closeQr" type="button" aria-label="Yopish">×</button>
+
+      <div class="logo-mark"><span>ZONE</span><i>X</i></div>
+      <p class="eyebrow">TELEFONGA O‘QITING</p>
+      <h2>ZONEX'ni<br><em>ulashing</em></h2>
+
+      <div class="qr-box" id="qrBox"></div>
+
+      <p class="qr-link" id="qrLink">zonex-project.vercel.app</p>
+
+      <div class="qr-actions">
+        <button class="primary" id="copyQr" type="button">HAVOLADAN NUSXA OLISH <span>⧉</span></button>
+        <button class="text-btn" id="openQr" type="button">Saytni ochish</button>
+      </div>
+    </div>
+  </div>
+
   <div class="speed-warn" id="speedWarn"></div>
 
   <div class="toast" id="toast"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="client.js"></script>
+  <script src="qr.js"></script>
+  <script src="game.js"></script>
 </body>
 </html>

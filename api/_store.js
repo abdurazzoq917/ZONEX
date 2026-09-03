@@ -27,6 +27,9 @@ const crypto = require("crypto");
 
 const geo = require("./_geo");
 const auth = require("./_auth");
+const daily = require("./_daily");
+const notify = require("./_notify");
+const skins = require("./_skins");
 
 const REDIS_URL =
   process.env.KV_REST_API_URL ||
@@ -597,6 +600,24 @@ function createPlayer(id, name) {
     incoming: [],
     outgoing: [],
 
+    // ---- point / naqish / chelenj ----
+    //
+    // points  — chelenj uchun to'plangan ochko
+    // skins   — sotib olingan naqishlar ro'yxati (id)
+    // skin    — hozir hududlarga qo'yilgan naqish
+    // daily   — bugungi chelenj holati (qarang: _daily.js)
+    // notifs  — bildirishnomalar (qarang: _notify.js)
+    // orders  — legendar naqish uchun pul buyurtmalari
+    // cashout — pointni pulga aylantirish so'rovlari
+    points: 0,
+    earned: 0,
+    skins: [],
+    skin: "",
+    daily: null,
+    notifs: [],
+    orders: [],
+    cashouts: [],
+
     createdAt: now,
     updatedAt: now
   };
@@ -669,6 +690,79 @@ function normalizeTerritory(territory, player) {
   }
 
   return out;
+}
+
+// ============================================================
+// POINT / NAQISH / CHELENJ / BILDIRISHNOMA
+// ============================================================
+//
+// Bularning barchasi o'yinchi yozuvining ichida yotadi.
+// Eski (bu maydonlar yo'q) yozuvlar ham bemalol ochiladi —
+// hammasi shu yerda bo'sh qiymat bilan to'ldiriladi.
+// ============================================================
+
+function orderList(value, kind) {
+  return (Array.isArray(value) ? value : [])
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const out = {
+        id: String(item.id || ""),
+        status: ["pending", "done", "rejected"].includes(String(item.status))
+          ? String(item.status)
+          : "pending",
+        time: Number(item.time) || 0,
+        note: String(item.note || "").slice(0, 120)
+      };
+
+      if (kind === "order") {
+        out.skinId = String(item.skinId || "");
+        out.price = Math.max(0, Math.floor(Number(item.price) || 0));
+      } else {
+        out.points = Math.max(0, Math.floor(Number(item.points) || 0));
+        out.amount = Math.max(0, Math.floor(Number(item.amount) || 0));
+        out.method = String(item.method || "").slice(0, 20);
+        out.account = String(item.account || "").slice(0, 40);
+      }
+
+      return out;
+    })
+    .filter((item) => item.id)
+    .sort((a, b) => b.time - a.time)
+    .slice(0, 40);
+}
+
+function normalizeGame(player) {
+  const points = Number(player.points);
+
+  player.points =
+    Number.isFinite(points) && points > 0 ? Math.floor(points) : 0;
+
+  const earned = Number(player.earned);
+
+  player.earned =
+    Number.isFinite(earned) && earned > 0 ? Math.floor(earned) : player.points;
+
+  // Sotib olingan naqishlar — faqat katalogda BOR bo'lganlari
+  player.skins = Array.from(
+    new Set(
+      (Array.isArray(player.skins) ? player.skins : [])
+        .map((id) => String(id || ""))
+        .filter((id) => skins.skinById(id))
+    )
+  ).slice(0, 60);
+
+  // Qo'yilgan naqish — faqat o'ziniki bo'lsa turadi
+  const active = String(player.skin || "");
+
+  player.skin = player.skins.includes(active) ? active : "";
+
+  daily.normalizeDaily(player);
+  notify.normalizeNotifs(player);
+
+  player.orders = orderList(player.orders, "order");
+  player.cashouts = orderList(player.cashouts, "cashout");
+
+  return player;
 }
 
 function normalizePlayer(player, id) {
@@ -767,6 +861,9 @@ function normalizePlayer(player, id) {
   player.incoming = idList(player.incoming);
   player.outgoing = idList(player.outgoing);
 
+  // ---- point / naqish / chelenj / bildirishnoma ----
+  normalizeGame(player);
+
   if (!Number.isFinite(Number(player.createdAt))) {
     player.createdAt = Date.now();
   }
@@ -816,6 +913,10 @@ function publicPlayer(player, viewerId) {
 
     friends: player.friends,
 
+    // Qo'yilgan naqish — buni HAMMA ko'radi, chunki hudud
+    // xaritada o'sha naqish bilan chiziladi
+    skin: player.skin || "",
+
     online: player.online,
     createdAt: player.createdAt,
     updatedAt: player.updatedAt
@@ -825,6 +926,15 @@ function publicPlayer(player, viewerId) {
     out.incoming = player.incoming;
     out.outgoing = player.outgoing;
     out.nsfwHits = player.nsfwHits;
+
+    // ---- point / naqish / chelenj / bildirishnoma ----
+    //
+    // Faqat o'ziga: boshqalar necha pointi borligini bilmaydi.
+    out.points = player.points;
+    out.earned = player.earned;
+    out.skins = player.skins;
+    out.notifUnread = notify.unreadCount(player);
+    out.dailyReady = daily.readyCount(player);
 
     // O'ziga: email BOR-yo'qligi va yashirilgan ko'rinishi.
     // To'liq manzil qaytmaydi — u faqat bazada qoladi.
@@ -1598,6 +1708,12 @@ module.exports = {
   findByName,
   findByEmail,
   isEmailTaken,
+
+  // point / naqish / chelenj / bildirishnoma
+  normalizeGame,
+  daily,
+  notify,
+  skins,
 
   // moderatsiya / do'stlik
   isAdminName,

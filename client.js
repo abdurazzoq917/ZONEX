@@ -641,6 +641,8 @@ function zoneStamp(territory, player, isMe) {
     ":" +
     (player.color || "") +
     ":" +
+    (player.skin || "") +
+    ":" +
     (isMe ? "1" : "0")
   );
 }
@@ -774,6 +776,13 @@ function drawZone(key, territory, player, isMe) {
     fillOpacity: isMe ? 0.32 : 0.2,
     weight: isMe ? 3 : 2
   }).addTo(state.map);
+
+  // Naqish (skin) qo'yilgan bo'lsa — ichi rang o'rniga naqsh
+  // bilan to'ldiriladi. Buni game.js bajaradi, chunki naqish
+  // tavsiflari o'sha yerda.
+  if (player.skin && window.ZONEX_GAME) {
+    window.ZONEX_GAME.paintZone(polygon, player.skin, isMe);
+  }
 
   // Hududning ustida egasining useri va yurgan masofasi turadi
   polygon.bindTooltip(zoneLabelHtml(territory, player), {
@@ -1102,6 +1111,9 @@ function renderWorld(players) {
   refreshProfile();
   renderSearch();
   renderFriends();
+
+  // Point, chelenj va bildirishnoma nishonlari (game.js)
+  if (window.ZONEX_GAME) window.ZONEX_GAME.onWorld(me);
 }
 
 function updateMyCard(me, mine) {
@@ -1189,6 +1201,8 @@ async function api(url, body) {
 // Sessiya yo'qoldi — o'yinni to'xtatib, kirish oynasini ochamiz
 function sessionLost(message) {
   if (!state.id && !state.token) return; // allaqachon chiqarilgan
+
+  if (window.ZONEX_GAME) window.ZONEX_GAME.stop();
 
   clearAccount();
 
@@ -4093,6 +4107,8 @@ function enterGame(data) {
   startPolling();
 
   ensureLocation();
+
+  if (window.ZONEX_GAME) window.ZONEX_GAME.start();
 }
 
 // ------------------------------------------------------------
@@ -4381,6 +4397,8 @@ async function submitChangePass() {
 async function logout() {
   const id = state.id;
   const token = state.token;
+
+  if (window.ZONEX_GAME) window.ZONEX_GAME.stop();
 
   clearInterval(state.worldTimer);
   clearInterval(state.chatListTimer);
@@ -4776,6 +4794,8 @@ async function boot() {
   startPolling();
 
   ensureLocation();
+
+  if (window.ZONEX_GAME) window.ZONEX_GAME.start();
 }
 
 if (document.readyState === "loading") {

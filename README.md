@@ -169,6 +169,11 @@ Upstash sahifasidagi **REST API** bo'limidan olingan qiymatlarni qo'ying.
 | `/api/location` | POST | Jonli joylashuvni yuborish |
 | `/api/territory` | POST | Hudud yopish, bosib olish |
 | `/api/world` | GET | Barcha o'yinchilar va hududlar |
+| `/api/friends` | POST | Do'stlik: so'rov, qabul, rad, o'chirish |
+| `/api/messages` | GET/POST | Suhbatlar va xabar yozish |
+| `/api/challenges` | GET/POST | Kunlik chelenj va mukofot olish |
+| `/api/shop` | GET/POST | Naqishlar, pointni pulga aylantirish |
+| `/api/notify` | GET/POST | Bildirishnomalar |
 
 `/api/world` dan boshqa hammasi **token** talab qiladi — u
 `x-zonex-token` sarlavhasida yuriladi. Tokenni `/api/auth` beradi
@@ -187,6 +192,92 @@ Upstash sahifasidagi **REST API** bo'limidan olingan qiymatlarni qo'ying.
 | `reset` | `login`, `ticket`, `password` | Yangi parol + yangi `token` |
 | `change` | `id`, `token`, `oldPassword`, `password` | Yangi `token` |
 
+## Kunlik chelenj va point
+
+Har kuni (O'zbekiston vaqti bo'yicha yarim tunda) o'yinchiga
+**uchta vazifa** beriladi: bittasi yengil, bittasi o'rtacha,
+bittasi og'ir. Vazifalar hech qayerda saqlanmaydi — ular kun
+sanasi va akkaunt raqamidan hisoblanadi, shuning uchun har kuni
+va har bir odamda boshqacha bo'ladi (`api/_daily.js`).
+
+Bajarilgani uchun **point** beriladi. Uchalasi ham olinsa —
+ketma-ket kunlar (streak) uchun qo'shimcha bonus.
+
+Hisoblagichlar o'yinning o'zidan to'ldiriladi:
+
+| Turi | Qayerda ortadi |
+| --- | --- |
+| `distance` | Hudud yopilganda — o'sha aylanish uzunligi |
+| `area` | Hudud yopilganda — yangi maydon |
+| `zones` | Har bir yopilgan hudud |
+| `capture` | Begonadan bosib olingan hudud |
+| `friends` | Yangi do'st qo'shilganda |
+| `chat` | Yozilgan har bir xabar |
+| `login` | Kun boshlanganda o'zi bajariladi |
+
+### Naqishlar (skin)
+
+Naqish — hududning ustiga qo'yiladigan bezak. Xaritada
+hududingiz oddiy rang o'rniga naqsh bilan chiziladi va **uni
+hamma ko'radi**. Katalog `api/_skins.js` da:
+
+| Daraja | Qanday olinadi | Narxi |
+| --- | --- | --- |
+| **Epik** | Point bilan | 2 500 – 4 500 point |
+| **Mifik** | Point bilan | 9 000 – 18 000 point |
+| **Legendar** | Faqat pulga (ataylab arzon) | 7 900 – 14 900 so'm |
+
+Narx va daraja faqat serverda turadi — brauzerdan
+o'zgartirib bo'lmaydi.
+
+### Pointni pulga aylantirish
+
+1 point = **5 so'm**, eng kami **5 000 point** (25 000 so'm).
+
+So'rov yuborilganda pointlar **darhol yechiladi** (ikki marta
+yuborib bo'lmasin), so'rov esa `pending` bo'lib turadi.
+Admin tasdiqlaydi yoki rad etadi — rad etilsa pointlar
+o'zi qaytariladi.
+
+Admin buyurtmalarni `POST /api/shop` orqali boshqaradi:
+
+```json
+{ "id": "<admin id>", "action": "admin", "do": "list", "key": "<ADMIN_KEY>" }
+{ "id": "<admin id>", "action": "admin", "do": "approve",
+  "target": "<o'yinchi id>", "orderId": "<so'rov id>", "key": "<ADMIN_KEY>" }
+```
+
+`do` uchun: `list` (kutayotganlari), `approve`, `reject`.
+Legendar naqish buyurtmasi tasdiqlansa — naqish o'zi ochiladi.
+
+## Bildirishnomalar
+
+Server o'yinchi yozuviga bildirishnoma qo'yadi
+(`api/_notify.js`), ilova esa har 20 soniyada `/api/notify` ni
+tekshiradi va **yangisini telefon ekraniga chiqaradi**
+(Android'da `@capacitor/local-notifications`, brauzerda
+`Notification` API).
+
+Qachon keladi:
+
+- hududingizni birov bosib oldi yoki kesdi;
+- do'stlik so'rovi keldi / so'rovingiz qabul qilindi;
+- yangi xabar keldi;
+- chelenj mukofoti yoki do'kondagi buyurtma holati o'zgardi.
+
+Android'da buning uchun `POST_NOTIFICATIONS` ruxsati kerak —
+ilova birinchi ochilganda o'zi so'raydi.
+
+## QR kod
+
+Ekranning o'ng pastida QR tugmasi turadi — bosilganda
+`https://zonex-project.vercel.app` ga olib boradigan QR kod
+butun ekranga chiqadi.
+
+QR kod telefonning **o'zida** chiziladi (`qr.js`) — internetdagi
+rasm xizmati ishlatilmaydi, shuning uchun ilova oflayn ochilganda
+ham ko'rinadi.
+
 ## Fayllar
 
 | Fayl | Nima uchun |
@@ -194,6 +285,11 @@ Upstash sahifasidagi **REST API** bo'limidan olingan qiymatlarni qo'ying.
 | `index.html` | Sahifa tuzilishi |
 | `styles.css` | Dizayn |
 | `client.js` | Xarita, GPS, tezlik nazorati, jonli odamlar |
+| `game.js` | Menyu, chelenj, do'kon, bildirishnoma, QR oynasi |
+| `qr.js` | QR kod yasovchi (oflayn ishlaydi, kutubxonasiz) |
+| `api/_daily.js` | Kunlik chelenj: vazifalar, hisoblagich, mukofot |
+| `api/_skins.js` | Naqishlar katalogi va narxlari |
+| `api/_notify.js` | Bildirishnomalar ro'yxati |
 | `api/_store.js` | Ma'lumotlar ombori, ranglar, geometriya, qoidalar |
 | `api/_auth.js` | Parol (scrypt), sessiya tokenlari, tiklash kodi |
 | `api/_mail.js` | Gmail SMTP orqali xat yuborish |

@@ -11,6 +11,7 @@
 // ============================================================
 
 const { json, preflight, readBody } = require("./_http");
+const { locked } = require("./_lock");
 
 const {
   readPlayers,
@@ -18,7 +19,10 @@ const {
   appendMessage,
   cleanMessage,
   isBanned,
-  banInfo
+  banInfo,
+  writePlayers,
+  daily,
+  notify
 } = require("./_store");
 
 const { guard } = require("./_auth");
@@ -32,7 +36,7 @@ function makeMessageId() {
   );
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   if (preflight(req, res)) return;
 
   try {
@@ -218,6 +222,20 @@ module.exports = async function handler(req, res) {
 
     const messages = await appendMessage(id, to, message);
 
+    // ---- chelenj hisoblagichi + qarshi tomonga bildirishnoma ----
+    daily.bump(me, "chat", 1);
+
+    notify.notify(other, {
+      type: "chat",
+      from: me.id,
+      fromName: me.name,
+      dedupe: true,
+      title: "@" + me.name,
+      body: text
+    });
+
+    await writePlayers([me, other]);
+
     return json(res, 200, {
       ok: true,
       message,
@@ -232,4 +250,7 @@ module.exports = async function handler(req, res) {
       message: error && error.message
     });
   }
-};
+}
+
+// Bazani o'zgartiradigan so'rovlar birin-ketin bajariladi
+module.exports = locked("players", handler);
