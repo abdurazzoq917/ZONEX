@@ -287,13 +287,17 @@ uchun Firebase (FCM) kerak bo'ladi, u alohida ish.
 
 ## 6. Sayt: yuklab olish sahifasi `[KOD]`
 
-Sayt ikki qismdan iborat:
+Sayt — faqat yuklab olish sahifasi:
 
 | Manzil | Nima |
 | --- | --- |
 | `/` | Yuklab olish sahifasi — APK tugmasi, QR kod, tanishtiruv |
-| `/app` | O'yinning o'zi (brauzer versiyasi) |
 | `/releases/zonex-latest.apk` | Android ilovasi |
+| `/api/...` | Server (ilova shunga ulanadi) |
+
+**Saytda o'yin yo'q** — u faqat ilovada ishlaydi. O'yin fayllari
+`.vercelignore` da, shuning uchun Vercel'ga yuklanmaydi. Lokalda
+sinash uchun `npm start` → `localhost:4173/app`.
 
 Yuklab olish sahifasi `version.json` ni o'qib, versiya raqami va
 APK hajmini o'zi ko'rsatadi — qo'lda yangilash shart emas.

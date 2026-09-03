@@ -89,7 +89,18 @@ function serveFile(req, res) {
 
   res.setHeader("Cache-Control", "no-cache");
 
-  res.end(fs.readFileSync(filePath));
+  const data = fs.readFileSync(filePath);
+
+  // Hajmni aniq aytamiz — yuklab olish sahifasi APK og'irligini
+  // HEAD so'rovi bilan shundan oladi
+  res.setHeader("Content-Length", data.length);
+
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
+
+  res.end(data);
 }
 
 async function handler(req, res) {

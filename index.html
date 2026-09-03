@@ -7,10 +7,10 @@
 
   <title>ZONEX — Yur. Egalla. Himoya qil.</title>
 
-  <meta name="description" content="ZONEX — yurgan joyingiz sizniki bo'ladigan o'yin. Android ilovasini yuklab oling yoki brauzerda o'ynang." />
+  <meta name="description" content="ZONEX — yurgan joyingiz sizniki bo'ladigan Android o'yini. APK'ni bepul yuklab oling." />
 
   <meta property="og:title" content="ZONEX — Yur. Egalla. Himoya qil." />
-  <meta property="og:description" content="Yurgan yo'lingizni kesib o'ting — o'sha yer sizniki. Hududlarni himoya qiling, do'stlar bilan raqobatlashing." />
+  <meta property="og:description" content="Yurgan yo'lingizni kesib o'ting — o'sha yer sizniki. Android ilovasini yuklab oling." />
   <meta property="og:type" content="website" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,8 +21,8 @@
     /* ==========================================================
        ZONEX — YUKLAB OLISH SAHIFASI
        ==========================================================
-       O'yinning o'zi /app da. Bu sahifa faqat ilovani tarqatish
-       uchun: APK, brauzer versiyasi va qisqa tanishtiruv.
+       Saytda o'yin YO'Q — u faqat Android ilovasida ishlaydi.
+       Bu sahifaning yagona vazifasi: APK'ni tarqatish.
        ========================================================== */
 
     :root {
@@ -159,20 +159,16 @@
     }
 
     .btn.apk {
+      padding: 19px 34px;
+      font-size: 15px;
       background: linear-gradient(120deg, var(--blue), #7c3aed);
       color: #fff;
       box-shadow: 0 14px 38px rgba(76,125,255,.4);
     }
 
+    .btn.apk b { font-size: 24px }
+
     .btn.apk:hover { filter: brightness(1.08) }
-
-    .btn.web {
-      background: rgba(255,255,255,.07);
-      border: 1px solid var(--line);
-      color: #fff;
-    }
-
-    .btn.web:hover { background: rgba(255,255,255,.12) }
 
     .btn b { font-size: 20px; line-height: 1 }
 
@@ -430,7 +426,7 @@
 
     <header>
       <div class="logo"><span>ZONE</span><i>X</i></div>
-      <a class="top-link" href="/app">Brauzerda o‘ynash →</a>
+      <a class="top-link" href="#get">Yuklab olish ↓</a>
     </header>
 
     <section class="hero">
@@ -442,22 +438,17 @@
         Yurgan yo‘lingizni kesib o‘ting — o‘sha yer sizniki bo‘ladi.
         Hududingizni himoya qiling, begonanikini bosib oling va
         shahringiz uchun reytingda kurashing.
+        <br><br>
+        O‘yin <b>Android ilovasida</b> ishlaydi — GPS fonda ham
+        yurishingizni yozib boradi.
       </p>
 
-      <div class="get">
+      <div class="get" id="get">
         <a class="btn apk" id="apkBtn" href="/releases/zonex-latest.apk" download>
           <b>⇩</b>
           <span>
             APK YUKLAB OLISH
             <small id="apkMeta">Android 7.0 va undan yuqori</small>
-          </span>
-        </a>
-
-        <a class="btn web" href="/app">
-          <b>▶</b>
-          <span>
-            BRAUZERDA O‘YNASH
-            <small>O‘rnatmasdan, darhol</small>
           </span>
         </a>
       </div>
@@ -469,7 +460,7 @@
         <p>
           <b>Telefonda ochish</b><br>
           QR kodni skanerlang — shu sahifa telefoningizda ochiladi
-          va APK’ni to‘g‘ridan-to‘g‘ri yuklab olasiz.
+          va APK’ni bir bosishda yuklab olasiz.
         </p>
       </div>
     </section>
@@ -591,7 +582,7 @@
     <footer>
       <span>© ZONEX — yurgan joying seniki</span>
       <span>
-        <a href="/app">Brauzerda o‘ynash</a> ·
+        <a href="/releases/zonex-latest.apk" download>APK yuklab olish</a> ·
         <a href="https://t.me/Abduumalikov_7" target="_blank" rel="noopener">Telegram</a>
       </span>
     </footer>

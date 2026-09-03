@@ -1,10 +1,28 @@
 # Vercel'ga KERAKMAS narsalar.
 #
-# MUHIM: `public/` bo'lsa, Vercel uni saytning ildizi deb oladi —
-# u yerdagi native-config.js esa telefonning LAN manziliga ulanadi.
+# MUHIM: `public/` bo'lsa, Vercel uni saytning ildizi deb oladi.
 # Shuning uchun `public/` yuklanmaydi va sayt ildizdagi
-# index.html / client.js / styles.css bilan ishlaydi.
+# index.html (yuklab olish sahifasi) bilan ishlaydi.
 public/
+
+# ============================================================
+# BRAUZER VERSIYASI SAYTGA CHIQMAYDI
+# ============================================================
+#
+# Sayt — faqat YUKLAB OLISH sahifasi. O'yinning o'zi endi
+# faqat Android ilovasida ishlaydi.
+#
+# Bu fayllar repozitoriyda QOLADI, chunki APK aynan ulardan
+# yig'iladi (npm run build:native ularni public/ ga ko'chiradi).
+# Lekin Vercel'ga yuklanmaydi — saytda /app degan sahifa yo'q.
+#
+# qr.js bundan MUSTASNO: yuklab olish sahifasidagi QR kodni
+# o'sha chizadi.
+app.html
+client.js
+game.js
+hub.js
+styles.css
 
 # Native (Android) ilova — serverga aloqasi yo'q, juda katta
 android/

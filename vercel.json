@@ -3,6 +3,19 @@
   "cleanUrls": true,
   "trailingSlash": false,
 
+  "redirects": [
+    {
+      "source": "/app",
+      "destination": "/",
+      "permanent": false
+    },
+    {
+      "source": "/app.html",
+      "destination": "/",
+      "permanent": false
+    }
+  ],
+
   "headers": [
     {
       "source": "/api/(.*)",

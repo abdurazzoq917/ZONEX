@@ -203,12 +203,19 @@ Upstash sahifasidagi **REST API** bo'limidan olingan qiymatlarni qo'ying.
 | Manzil | Nima |
 | --- | --- |
 | `/` | **Yuklab olish sahifasi** — APK, tanishtiruv, QR kod |
-| `/app` | **O'yinning o'zi** (brauzer versiyasi) |
 | `/releases/zonex-latest.apk` | Android ilovasi |
+| `/api/...` | Server (ilova shunga ulanadi) |
 
-Android ilovasi ham `/app` dagi kodning aynan o'zini ishlatadi:
-`npm run build:native` `app.html` ni `public/index.html` qilib
-ko'chiradi.
+**Saytda o'yin YO'Q.** O'yin faqat Android ilovasida ishlaydi —
+GPS fonda ishlashi, bildirishnomalar va avto-yangilanish uchun
+native ilova kerak.
+
+O'yin kodi (`app.html`, `client.js`, `game.js`, `hub.js`,
+`styles.css`) repozitoriyda qoladi, chunki APK aynan ulardan
+yig'iladi. Lekin `.vercelignore` orqali saytga yuklanmaydi —
+`/app` degan sahifa yo'q, u ildizga qaytaradi.
+
+Lokalda o'yinni sinash uchun: `npm start` → `localhost:4173/app`.
 
 ## Uy, daraja va xaritalar
 
