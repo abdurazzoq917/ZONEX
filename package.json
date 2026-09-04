@@ -12,7 +12,7 @@
     "reset-db": "node scripts/reset-db.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": "22.x"
   },
   "dependencies": {
     "@capacitor-community/background-geolocation": "^1.2.26",
