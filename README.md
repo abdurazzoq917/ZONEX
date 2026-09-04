@@ -454,9 +454,10 @@ ilova birinchi ochilganda o'zi so'raydi.
 
 ## QR kod
 
-Ekranning o'ng pastida QR tugmasi turadi — bosilganda
+Menyudagi "QR kod" bandi bosilganda
 `https://zonex-project.vercel.app` ga olib boradigan QR kod
-butun ekranga chiqadi.
+butun ekranga chiqadi. (Ilgari ekranning o'ng pastida ham
+suzuvchi tugma bor edi — u olib tashlandi.)
 
 QR kod telefonning **o'zida** chiziladi (`qr.js`) — internetdagi
 rasm xizmati ishlatilmaydi, shuning uchun ilova oflayn ochilganda

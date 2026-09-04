@@ -1887,54 +1887,10 @@
   top: -3px;
 }
 
-/* ===============================
-   PASTKI O'NG: QR KOD
-   =============================== */
-
-.qr-btn {
-  position: fixed;
-  z-index: 450;
-  right: 16px;
-  bottom: 191px;
-  width: 56px;
-  padding: 6px 6px 5px;
-  border: 0;
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: 0 6px 20px rgba(18, 23, 39, .16);
-  cursor: pointer;
-  text-align: center;
-}
-
-.qr-mini {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 7px;
-  overflow: hidden;
-  background: #fff;
-}
-
-.qr-mini svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.qr-btn small {
-  display: block;
-  margin-top: 3px;
-  font-size: 6.5px;
-  font-weight: 900;
-  letter-spacing: .8px;
-  color: var(--muted);
-}
-
 /* Katta ekranda pastdagi panel o'rtada turadi —
-   tugmalar unga yopishib qolmasin */
+   tugma unga yopishib qolmasin */
 @media (min-width: 700px) {
   .points-btn { left: calc(50% - 330px) }
-  .qr-btn { right: calc(50% - 270px) }
 }
 
 /* ===============================

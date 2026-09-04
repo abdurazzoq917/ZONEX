@@ -1211,23 +1211,6 @@
         '<p class="empty">QR kodni chizib bo\'lmadi — havolani ' +
         "qo'lda yozing</p>";
     }
-
-    // Tugmachadagi kichkina QR
-    const mini = $("#qrMini");
-
-    if (mini && !mini.dataset.done) {
-      try {
-        mini.innerHTML = window.ZonexQR.svg(SHARE_URL, {
-          quiet: 1,
-          dark: "#10121a",
-          light: "#ffffff"
-        });
-
-        mini.dataset.done = "1";
-      } catch {
-        mini.textContent = "QR";
-      }
-    }
   }
 
   async function copyLink() {
@@ -1345,9 +1328,6 @@
 
     // ---- pastki chap: point ----
     $("#pointsBtn")?.addEventListener("click", () => openShop("skins"));
-
-    // ---- pastki o'ng: QR ----
-    $("#qrBtn")?.addEventListener("click", openQr);
 
     $("#closeQr")?.addEventListener("click", () => closeModal("#qrModal"));
 
