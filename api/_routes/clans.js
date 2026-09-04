@@ -20,8 +20,8 @@
 // to'lib ketmasin.
 // ============================================================
 
-const { json, preflight, readBody } = require("./_http");
-const { locked } = require("./_lock");
+const { json, preflight, readBody } = require("../_http");
+const { locked } = require("../_lock");
 
 const {
   readPlayers,
@@ -32,9 +32,9 @@ const {
   banInfo,
   clans,
   notify
-} = require("./_store");
+} = require("../_store");
 
-const { guard } = require("./_auth");
+const { guard } = require("../_auth");
 
 // O'yinchining klan haqidagi ma'lumotini yozuviga yozamiz
 function attach(player, clan) {

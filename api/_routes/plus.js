@@ -17,8 +17,8 @@
 // xarita ochilmaydi) — faqat ko'rinish va qulaylik.
 // ============================================================
 
-const { json, preflight, readBody } = require("./_http");
-const { locked } = require("./_lock");
+const { json, preflight, readBody } = require("../_http");
+const { locked } = require("../_lock");
 
 const {
   readPlayers,
@@ -29,9 +29,9 @@ const {
   plus,
   notify,
   skins
-} = require("./_store");
+} = require("../_store");
 
-const { guard } = require("./_auth");
+const { guard } = require("../_auth");
 
 function makeOrderId() {
   return (

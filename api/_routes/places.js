@@ -20,8 +20,8 @@
 // Reklama uchun murojaat: Telegram @Abduumalikov_7
 // ============================================================
 
-const { json, preflight, readBody } = require("./_http");
-const { locked } = require("./_lock");
+const { json, preflight, readBody } = require("../_http");
+const { locked } = require("../_lock");
 
 const {
   readPlayers,
@@ -30,9 +30,9 @@ const {
   adminAllowed,
   places,
   plus
-} = require("./_store");
+} = require("../_store");
 
-const { guard } = require("./_auth");
+const { guard } = require("../_auth");
 
 function boxFrom(params) {
   const south = Number(params.get("south"));

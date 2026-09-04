@@ -18,7 +18,7 @@
 // qaytadi — u har doim jami bo'yicha hisoblanadi.
 // ============================================================
 
-const { json, preflight } = require("./_http");
+const { json, preflight } = require("../_http");
 
 const {
   readPlayers,
@@ -27,9 +27,9 @@ const {
   cities,
   clans,
   plus
-} = require("./_store");
+} = require("../_store");
 
-const { guard } = require("./_auth");
+const { guard } = require("../_auth");
 
 const SCOPES = ["global", "country", "city", "friends", "clans"];
 const PERIODS = ["daily", "weekly", "monthly", "total"];

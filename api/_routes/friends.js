@@ -11,8 +11,8 @@
 // Xabar (chat) yozish faqat DO'ST bo'lgandan keyin ochiladi.
 // ============================================================
 
-const { json, preflight, readBody } = require("./_http");
-const { locked } = require("./_lock");
+const { json, preflight, readBody } = require("../_http");
+const { locked } = require("../_lock");
 
 const {
   readPlayers,
@@ -24,9 +24,9 @@ const {
   notify,
   level,
   stats
-} = require("./_store");
+} = require("../_store");
 
-const { guard } = require("./_auth");
+const { guard } = require("../_auth");
 
 function drop(list, value) {
   return (Array.isArray(list) ? list : []).filter(

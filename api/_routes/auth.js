@@ -21,8 +21,8 @@
 //           uning sha256 izini saqlaydi.
 // ============================================================
 
-const { json, preflight, readBody } = require("./_http");
-const { locked } = require("./_lock");
+const { json, preflight, readBody } = require("../_http");
+const { locked } = require("../_lock");
 
 const {
   readPlayers,
@@ -36,10 +36,10 @@ const {
   findByName,
   findByEmail,
   isEmailTaken
-} = require("./_store");
+} = require("../_store");
 
-const auth = require("./_auth");
-const { sendResetCode } = require("./_mail");
+const auth = require("../_auth");
+const { sendResetCode } = require("../_mail");
 
 // ============================================================
 // YORDAMCHILAR

@@ -10,8 +10,8 @@
 // 5. O'zining YONMA-YON hududlarini bitta qilib qo'shib yuboradi
 // ============================================================
 
-const { json, preflight, readBody } = require("./_http");
-const { locked } = require("./_lock");
+const { json, preflight, readBody } = require("../_http");
+const { locked } = require("../_lock");
 
 const {
   readPlayers,
@@ -33,9 +33,9 @@ const {
   defense,
   stats,
   RULES
-} = require("./_store");
+} = require("../_store");
 
-const { guard } = require("./_auth");
+const { guard } = require("../_auth");
 
 function makeTerritoryId() {
   return (

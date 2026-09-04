@@ -7,7 +7,7 @@
 // shuning uchun odamlar bir-birini deyarli darhol ko'radi.
 // ============================================================
 
-const { json, preflight, readBody } = require("./_http");
+const { json, preflight, readBody } = require("../_http");
 
 const {
   readPlayers,
@@ -15,9 +15,9 @@ const {
   distanceMeters,
   publicPlayer,
   publicList
-} = require("./_store");
+} = require("../_store");
 
-const { guard } = require("./_auth");
+const { guard } = require("../_auth");
 
 // Ikki GPS nuqtasi orasidagi eng katta ishonchli qadam (metr)
 const MAX_STEP = 500;

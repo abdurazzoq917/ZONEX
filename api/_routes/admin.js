@@ -21,7 +21,7 @@
 // u ham to'g'ri bo'lishi shart.
 // ============================================================
 
-const { json, preflight } = require("./_http");
+const { json, preflight } = require("../_http");
 
 const {
   readPlayers,
@@ -34,9 +34,9 @@ const {
   maps,
   clans,
   RULES
-} = require("./_store");
+} = require("../_store");
 
-const { guard } = require("./_auth");
+const { guard } = require("../_auth");
 
 const DAY = 24 * 60 * 60 * 1000;
 

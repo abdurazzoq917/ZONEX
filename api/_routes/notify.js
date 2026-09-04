@@ -17,12 +17,12 @@
 // bo'lsa mahalliy (local) bildirishnoma beradi.
 // ============================================================
 
-const { json, preflight, readBody } = require("./_http");
-const { locked } = require("./_lock");
+const { json, preflight, readBody } = require("../_http");
+const { locked } = require("../_lock");
 
-const { readPlayers, writePlayers, notify } = require("./_store");
+const { readPlayers, writePlayers, notify } = require("../_store");
 
-const { guard } = require("./_auth");
+const { guard } = require("../_auth");
 
 async function handler(req, res) {
   if (preflight(req, res)) return;

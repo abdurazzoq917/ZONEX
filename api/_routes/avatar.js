@@ -21,8 +21,8 @@
 //   - admin bandan chiqarib yuborishi mumkin.
 // ============================================================
 
-const { json, preflight, readBody } = require("./_http");
-const { locked } = require("./_lock");
+const { json, preflight, readBody } = require("../_http");
+const { locked } = require("../_lock");
 
 const {
   readPlayers,
@@ -32,9 +32,9 @@ const {
   applyBan,
   banInfo,
   RULES
-} = require("./_store");
+} = require("../_store");
 
-const { guard } = require("./_auth");
+const { guard } = require("../_auth");
 
 // Faqat oddiy rasm formatlari
 const ALLOWED = /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/;

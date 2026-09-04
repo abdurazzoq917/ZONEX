@@ -13,25 +13,14 @@ const path = require("path");
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT) || 4173;
 
-const routes = {
-  "/api/world": require("./api/world"),
-  "/api/auth": require("./api/auth"),
-  "/api/location": require("./api/location"),
-  "/api/territory": require("./api/territory"),
-  "/api/avatar": require("./api/avatar"),
-  "/api/moderate": require("./api/moderate"),
-  "/api/friends": require("./api/friends"),
-  "/api/messages": require("./api/messages"),
-  "/api/challenges": require("./api/challenges"),
-  "/api/shop": require("./api/shop"),
-  "/api/notify": require("./api/notify"),
-  "/api/profile": require("./api/profile"),
-  "/api/rank": require("./api/rank"),
-  "/api/clans": require("./api/clans"),
-  "/api/plus": require("./api/plus"),
-  "/api/places": require("./api/places"),
-  "/api/admin": require("./api/admin")
-};
+// Yo'nalishlar jadvali api/_routes/index.js da — Vercel bilan
+// AYNAN bir xil bo'lishi uchun shu yerda qayta yozilmaydi.
+const handlers = require("./api/_routes");
+
+const routes = {};
+for (const name of Object.keys(handlers)) {
+  routes["/api/" + name] = handlers[name];
+}
 
 const types = {
   ".html": "text/html; charset=utf-8",
